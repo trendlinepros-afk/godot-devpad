@@ -25,7 +25,14 @@ export default defineConfig({
             rollupOptions: {
               // These are loaded at runtime from node_modules in the packaged
               // app and must not be bundled by Rollup.
-              external: ['electron', 'electron-store', 'express', 'openai', '@google/generative-ai'],
+              external: [
+                'electron',
+                'electron-store',
+                'electron-updater',
+                'express',
+                'openai',
+                '@google/generative-ai',
+              ],
             },
           },
           resolve: {

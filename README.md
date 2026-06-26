@@ -35,6 +35,22 @@ Godot executable, and at least one API key.
 | 8 | Godot version manager (local + silent remote merge) | `godot-versions.json`, `electron/versions.ts` |
 | 9 | Multi-monitor window positioning | `electron/main.ts` (`applyMonitorPosition`) |
 | 10 | Notes hub (markdown, shared AI context) | `src/components/NotesList.tsx`, `src/components/NoteEditor.tsx`, `src/lib/notes.ts` |
+| 11 | Project launcher (New / Open Recent) | `src/components/Launcher.tsx` |
+| 12 | App self-update (GitHub Releases) | `electron/updater.ts`, `src/components/UpdateControls.tsx` |
+
+## Launcher & self-update
+
+On open, DevPad shows a **launcher**: **Start New Project** (pick a folder —
+DevPad scaffolds a `project.godot` if the folder doesn't have one), **Open
+Project…**, and an **Open Recent** list. Click the DevPad logo in the toolbar to
+return to it.
+
+The launcher's **lower-left** has a **Check for Updates** button (also in
+Settings → App Updates). It uses `electron-updater` against the GitHub release
+provider configured in `package.json` (`build.publish`): on a packaged build it
+checks Releases, auto-downloads a newer installer, and prompts to restart &
+install. In `npm run dev` it reports that updates need an installed build.
+DevPad also does a silent update check on startup.
 
 ## Notes — shared AI context
 

@@ -6,6 +6,7 @@ import type {
   GodotStatus,
   MonitorPosition,
   ProviderId,
+  UpdateStatus,
 } from '@shared/types'
 
 // The ONLY bridge between the sandboxed renderer and the main process. Every
@@ -50,6 +51,21 @@ const bridge: DevPadBridge = {
   mcp: {
     getStatus: () => ipcRenderer.invoke('mcp:status'),
     setEnabled: (enabled: boolean) => ipcRenderer.invoke('mcp:setEnabled', enabled),
+  },
+  updates: {
+    getStatus: () => ipcRenderer.invoke('updates:status'),
+    check: () => ipcRenderer.invoke('updates:check'),
+    download: () => ipcRenderer.invoke('updates:download'),
+    install: () => ipcRenderer.invoke('updates:install'),
+    onStatus: (cb) => {
+      const listener = (_e: unknown, status: UpdateStatus) => cb(status)
+      ipcRenderer.on('updates:status', listener)
+      return () => ipcRenderer.removeListener('updates:status', listener)
+    },
+  },
+  projects: {
+    createNew: (dir: string) => ipcRenderer.invoke('project:createNew', dir),
+    validate: (dir: string) => ipcRenderer.invoke('project:validate', dir),
   },
   versions: {
     getAll: () => ipcRenderer.invoke('versions:getAll'),

@@ -17,8 +17,21 @@ import {
   onStatusChange as onGodotStatusChange,
   GodotLaunchError,
 } from './godot'
-import { listDir, readFileText, openExternal } from './files'
+import {
+  listDir,
+  readFileText,
+  openExternal,
+  createNewProject,
+  validateProject,
+} from './files'
 import { captureGodotWindow } from './capture'
+import {
+  initUpdater,
+  getUpdateStatus,
+  checkForUpdates as checkAppUpdates,
+  downloadUpdate,
+  installUpdate,
+} from './updater'
 import { loadVersions, checkForUpdates } from './versions'
 import { setMcpEnabled, startMcpServer, getMcpStatus } from './mcp-server'
 import { route } from './ai/router'
@@ -223,6 +236,16 @@ function registerIpc(): void {
     return result.canceled ? null : (result.filePaths[0] ?? null)
   })
 
+  // App self-update
+  ipcMain.handle('updates:status', () => getUpdateStatus())
+  ipcMain.handle('updates:check', () => checkAppUpdates())
+  ipcMain.handle('updates:download', () => downloadUpdate())
+  ipcMain.handle('updates:install', () => installUpdate())
+
+  // Projects (new / validate)
+  ipcMain.handle('project:createNew', (_e, dir: string) => createNewProject(dir))
+  ipcMain.handle('project:validate', (_e, dir: string) => validateProject(dir))
+
   // MCP
   ipcMain.handle('mcp:status', () => getMcpStatus())
   ipcMain.handle('mcp:setEnabled', async (_e, value: boolean) => {
@@ -252,6 +275,10 @@ app.whenReady().then(async () => {
   registerIpc()
   createWindow()
   registerHotkeys()
+
+  // Wire app self-update events to the renderer, then do a silent startup check.
+  initUpdater((status) => mainWindow?.webContents.send('updates:status', status))
+  checkAppUpdates().catch(() => {})
 
   // Start the MCP server automatically if enabled in settings.
   if (getConfig().mcpEnabled) {

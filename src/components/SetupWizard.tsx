@@ -32,10 +32,13 @@ export function SetupWizard({ onDone }: Props) {
     if (path) setExePath(path)
   }
 
+  const recents = (dir: string) => (dir ? [dir] : [])
+
   const finish = async () => {
     const detected = versions ? detectVersionFromPath(versions, exePath) : null
     await update({
       projectDir,
+      recentProjects: recents(projectDir),
       godotExecutablePath: exePath,
       apiKeys: keys,
       setupComplete: true,
@@ -48,6 +51,7 @@ export function SetupWizard({ onDone }: Props) {
     // Persist whatever has been entered so far and jump into the app.
     await update({
       projectDir,
+      recentProjects: recents(projectDir),
       godotExecutablePath: exePath,
       apiKeys: keys,
       setupComplete: true,

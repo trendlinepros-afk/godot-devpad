@@ -129,6 +129,31 @@ export interface Note {
   updatedAt: number
 }
 
+// ── App self-update ──────────────────────────────────────────────────────────
+
+export type UpdateState =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'not-available'
+  | 'downloading'
+  | 'downloaded'
+  | 'error'
+  | 'unsupported'
+
+export interface UpdateStatus {
+  state: UpdateState
+  /** The currently-installed app version. */
+  version: string
+  /** The newer version available on GitHub, when state is available/downloaded. */
+  newVersion?: string
+  /** Download progress 0–100 while downloading. */
+  percent?: number
+  /** Release notes for the available update, if provided. */
+  notes?: string
+  error?: string
+}
+
 // ── MCP server ───────────────────────────────────────────────────────────────
 
 export interface McpStatus {
@@ -152,6 +177,8 @@ export interface DevPadConfig {
   apiKeys: ApiKeys
   godotExecutablePath: string
   projectDir: string
+  /** Recently-opened project folders, most-recent first. */
+  recentProjects: string[]
   activeVersionId: string
   activeProfileId: string
   profiles: ModelProfile[]
@@ -208,6 +235,22 @@ export interface DevPadBridge {
   mcp: {
     getStatus(): Promise<McpStatus>
     setEnabled(enabled: boolean): Promise<McpStatus>
+  }
+  updates: {
+    getStatus(): Promise<UpdateStatus>
+    /** Check GitHub for a newer installer; auto-downloads if one is found. */
+    check(): Promise<UpdateStatus>
+    /** Manually trigger the download (no-op if already downloading/downloaded). */
+    download(): Promise<UpdateStatus>
+    /** Quit and install a downloaded update. */
+    install(): Promise<void>
+    onStatus(cb: (s: UpdateStatus) => void): () => void
+  }
+  projects: {
+    /** Ensure a project.godot exists in dir (creating a minimal one), then open. */
+    createNew(dir: string): Promise<{ ok: boolean; error?: string }>
+    /** Validate a folder is usable as a project (exists). */
+    validate(dir: string): Promise<{ ok: boolean; hasProjectFile: boolean }>
   }
   versions: {
     getAll(): Promise<GodotVersionsFile>

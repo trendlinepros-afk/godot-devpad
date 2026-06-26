@@ -15,6 +15,7 @@ const defaults: DevPadConfig = {
   apiKeys: { deepseek: '', gemini: '', openai: '' },
   godotExecutablePath: '',
   projectDir: '',
+  recentProjects: [],
   activeVersionId: 'godot-4',
   activeProfileId: DEFAULT_PROFILE_ID,
   profiles: DEFAULT_PROFILES,

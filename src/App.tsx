@@ -9,19 +9,19 @@ import { ChatPanel } from './components/ChatPanel'
 import { SettingsPanel } from './components/SettingsPanel'
 import { ModelProfileEditor } from './components/ModelProfileEditor'
 import { SetupWizard } from './components/SetupWizard'
+import { Launcher } from './components/Launcher'
 
 type LeftTab = 'files' | 'notes'
 type MainView = 'chat' | 'note'
+type View = 'launcher' | 'app'
 
-function Shell() {
+function Root() {
   const { ready, config, refreshVersions } = useApp()
   const { toast } = useToast()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [profilesOpen, setProfilesOpen] = useState(false)
   const [wizardDone, setWizardDone] = useState(false)
-  const [leftTab, setLeftTab] = useState<LeftTab>('files')
-  const [mainView, setMainView] = useState<MainView>('chat')
-  const [activeNoteId, setActiveNoteId] = useState<string | null>(null)
+  const [view, setView] = useState<View>('launcher')
 
   // Subtle toast + refresh when version definitions are merged from remote.
   useEffect(() => {
@@ -40,9 +40,55 @@ function Shell() {
     )
   }
 
+  // First-launch wizard captures the executable, first project and API keys.
+  // On completion we drop straight into the app with the chosen project; the
+  // launcher (Start New / Open Recent) is shown on subsequent opens.
   if (!config.setupComplete && !wizardDone) {
-    return <SetupWizard onDone={() => setWizardDone(true)} />
+    return (
+      <SetupWizard
+        onDone={() => {
+          setWizardDone(true)
+          setView('app')
+        }}
+      />
+    )
   }
+
+  return (
+    <>
+      {view === 'launcher' ? (
+        <Launcher onEnter={() => setView('app')} onOpenSettings={() => setSettingsOpen(true)} />
+      ) : (
+        <Shell
+          onHome={() => setView('launcher')}
+          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenProfiles={() => setProfilesOpen(true)}
+        />
+      )}
+
+      {settingsOpen && (
+        <SettingsPanel
+          onClose={() => setSettingsOpen(false)}
+          onOpenProfiles={() => setProfilesOpen(true)}
+        />
+      )}
+      {profilesOpen && <ModelProfileEditor onClose={() => setProfilesOpen(false)} />}
+    </>
+  )
+}
+
+function Shell({
+  onHome,
+  onOpenSettings,
+  onOpenProfiles,
+}: {
+  onHome: () => void
+  onOpenSettings: () => void
+  onOpenProfiles: () => void
+}) {
+  const [leftTab, setLeftTab] = useState<LeftTab>('files')
+  const [mainView, setMainView] = useState<MainView>('chat')
+  const [activeNoteId, setActiveNoteId] = useState<string | null>(null)
 
   const openNote = (id: string) => {
     setActiveNoteId(id)
@@ -51,10 +97,7 @@ function Shell() {
 
   return (
     <div className="flex h-full flex-col">
-      <Toolbar
-        onOpenSettings={() => setSettingsOpen(true)}
-        onOpenProfiles={() => setProfilesOpen(true)}
-      />
+      <Toolbar onHome={onHome} onOpenSettings={onOpenSettings} onOpenProfiles={onOpenProfiles} />
       <div className="flex min-h-0 flex-1">
         {/* Left sidebar: Files / Notes */}
         <aside className="flex w-64 shrink-0 flex-col border-r border-panel-600">
@@ -92,7 +135,7 @@ function Shell() {
           <div className="min-h-0 flex-1">
             {/* ChatPanel stays mounted so conversation history is preserved. */}
             <div className={`h-full ${mainView === 'chat' ? '' : 'hidden'}`}>
-              <ChatPanel onOpenSettings={() => setSettingsOpen(true)} />
+              <ChatPanel onOpenSettings={onOpenSettings} />
             </div>
             <div className={`h-full ${mainView === 'note' ? '' : 'hidden'}`}>
               <NoteEditor noteId={activeNoteId} onSelect={setActiveNoteId} />
@@ -100,14 +143,6 @@ function Shell() {
           </div>
         </main>
       </div>
-
-      {settingsOpen && (
-        <SettingsPanel
-          onClose={() => setSettingsOpen(false)}
-          onOpenProfiles={() => setProfilesOpen(true)}
-        />
-      )}
-      {profilesOpen && <ModelProfileEditor onClose={() => setProfilesOpen(false)} />}
     </div>
   )
 }
@@ -144,7 +179,7 @@ export default function App() {
   return (
     <ToastProvider>
       <AppProvider>
-        <Shell />
+        <Root />
       </AppProvider>
     </ToastProvider>
   )

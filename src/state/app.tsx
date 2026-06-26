@@ -12,6 +12,7 @@ import type {
   GodotStatus,
   GodotVersionsFile,
   McpStatus,
+  UpdateStatus,
 } from '@shared/types'
 
 // Central renderer state: the persisted config, the Godot version registry, live
@@ -25,6 +26,7 @@ interface AppState {
   versions: GodotVersionsFile | null
   godotStatus: GodotStatus
   mcpStatus: McpStatus
+  updateStatus: UpdateStatus
   /** Persist a partial config update and refresh the cached copy. */
   update: (partial: Partial<DevPadConfig>) => Promise<void>
   refreshVersions: () => Promise<void>
@@ -56,6 +58,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     running: false,
     port: 3727,
   })
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({
+    state: 'idle',
+    version: '',
+  })
   const [ready, setReady] = useState(false)
 
   const update = useCallback(async (partial: Partial<DevPadConfig>) => {
@@ -74,24 +80,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true
     ;(async () => {
-      const [cfg, vers, status, mcp] = await Promise.all([
+      const [cfg, vers, status, mcp, upd] = await Promise.all([
         window.devpad.config.getAll(),
         window.devpad.versions.getAll(),
         window.devpad.godot.status(),
         window.devpad.mcp.getStatus(),
+        window.devpad.updates.getStatus(),
       ])
       if (!mounted) return
       setConfig(cfg)
       setVersions(vers)
       setGodotStatus(status)
       setMcpStatus(mcp)
+      setUpdateStatus(upd)
       setReady(true)
     })()
 
     const offStatus = window.devpad.godot.onStatusChange((s) => setGodotStatus(s))
+    const offUpdate = window.devpad.updates.onStatus((s) => setUpdateStatus(s))
     return () => {
       mounted = false
       offStatus()
+      offUpdate()
     }
   }, [])
 
@@ -102,12 +112,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
       versions,
       godotStatus,
       mcpStatus,
+      updateStatus,
       update,
       refreshVersions,
       refreshMcp,
       setGodotStatus,
     }),
-    [ready, config, versions, godotStatus, mcpStatus, update, refreshVersions, refreshMcp],
+    [
+      ready,
+      config,
+      versions,
+      godotStatus,
+      mcpStatus,
+      updateStatus,
+      update,
+      refreshVersions,
+      refreshMcp,
+    ],
   )
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>

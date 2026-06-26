@@ -12,11 +12,12 @@ import {
 } from './Icons'
 
 interface ToolbarProps {
+  onHome: () => void
   onOpenSettings: () => void
   onOpenProfiles: () => void
 }
 
-export function Toolbar({ onOpenSettings, onOpenProfiles }: ToolbarProps) {
+export function Toolbar({ onHome, onOpenSettings, onOpenProfiles }: ToolbarProps) {
   const { config, godotStatus, update, setGodotStatus } = useApp()
   const { toast } = useToast()
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
@@ -75,13 +76,17 @@ export function Toolbar({ onOpenSettings, onOpenProfiles }: ToolbarProps) {
 
   return (
     <div className="flex h-12 shrink-0 items-center gap-2 border-b border-panel-600 bg-panel-850 px-3">
-      {/* Brand */}
-      <div className="mr-2 flex items-center gap-2 font-semibold tracking-tight">
+      {/* Brand — click to return to the project launcher */}
+      <button
+        onClick={onHome}
+        title="Back to projects"
+        className="mr-2 flex items-center gap-2 rounded-md px-1.5 py-1 font-semibold tracking-tight hover:bg-panel-700"
+      >
         <span className="grid h-6 w-6 place-items-center rounded bg-accent text-xs font-bold text-white">
           D
         </span>
         <span className="text-slate-100">DevPad</span>
-      </div>
+      </button>
 
       {/* Launcher controls */}
       <div className="flex items-center gap-1">

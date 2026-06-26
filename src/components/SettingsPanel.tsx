@@ -4,8 +4,9 @@ import { useApp } from '../state/app'
 import { useToast } from './Toast'
 import { detectVersionFromPath } from '../lib/godot-versions'
 import { XIcon, StarIcon, EditIcon, PlusIcon } from './Icons'
+import { UpdateControls } from './UpdateControls'
 
-type Section = 'ai' | 'godot' | 'mcp' | 'window' | 'versions'
+type Section = 'ai' | 'godot' | 'mcp' | 'window' | 'versions' | 'updates'
 
 const SECTIONS: { key: Section; label: string }[] = [
   { key: 'ai', label: 'AI / Models' },
@@ -13,6 +14,7 @@ const SECTIONS: { key: Section; label: string }[] = [
   { key: 'mcp', label: 'MCP Server' },
   { key: 'window', label: 'Window' },
   { key: 'versions', label: 'Godot Versions' },
+  { key: 'updates', label: 'App Updates' },
 ]
 
 interface Props {
@@ -64,6 +66,7 @@ export function SettingsPanel({ onClose, onOpenProfiles }: Props) {
             {section === 'mcp' && <McpSection />}
             {section === 'window' && <WindowSection />}
             {section === 'versions' && <VersionsSection />}
+            {section === 'updates' && <UpdatesSection />}
           </div>
         </div>
       </div>
@@ -405,6 +408,21 @@ function WindowSection() {
         DevPad is designed to sit on a second monitor next to the Godot window. Only monitors that
         are actually connected are shown. Window size and position are remembered.
       </p>
+    </div>
+  )
+}
+
+// ── App Updates ───────────────────────────────────────────────────────────────
+
+function UpdatesSection() {
+  return (
+    <div>
+      <SectionTitle>App Updates</SectionTitle>
+      <p className="mb-4 text-xs leading-relaxed text-slate-500">
+        DevPad checks GitHub Releases for a newer installer. When an update is found it downloads
+        automatically and prompts you to restart and install.
+      </p>
+      <UpdateControls />
     </div>
   )
 }
