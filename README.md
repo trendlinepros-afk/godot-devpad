@@ -52,6 +52,29 @@ checks Releases, auto-downloads a newer installer, and prompts to restart &
 install. In `npm run dev` it reports that updates need an installed build.
 DevPad also does a silent update check on startup.
 
+### Cutting a release
+
+The updater pulls from GitHub Releases, which are produced by
+`.github/workflows/release.yml`. To publish a new version:
+
+1. Bump `"version"` in `package.json`.
+2. Commit, then push a matching tag:
+   ```bash
+   git tag v0.1.0
+   git push origin v0.1.0
+   ```
+
+The workflow builds the Windows (NSIS) and macOS (dmg) installers on their
+native runners and publishes them — plus the `latest.yml` / `latest-mac.yml`
+metadata that electron-updater reads — to a GitHub Release. It authenticates
+with the automatic `GITHUB_TOKEN`, so no extra secrets are required for an
+unsigned build. (You can also trigger it manually from the Actions tab.)
+
+> For production macOS auto-updates you'll need Apple code-signing +
+> notarization; the CI currently builds macOS unsigned
+> (`CSC_IDENTITY_AUTO_DISCOVERY=false`). Windows auto-update works unsigned, but
+> users will see a SmartScreen prompt until the installer is code-signed.
+
 ## Notes — shared AI context
 
 DevPad has a built-in notes hub (left sidebar → **Notes** tab) so ideas, todos,

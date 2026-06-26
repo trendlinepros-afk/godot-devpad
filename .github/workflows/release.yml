@@ -1,0 +1,55 @@
+name: Release
+
+# Builds DevPad installers and publishes them to GitHub Releases so the in-app
+# auto-updater (electron-updater, configured via package.json build.publish) has
+# artifacts to pull from.
+#
+# Usage: bump "version" in package.json, then push a matching tag:
+#   git tag v0.1.0 && git push origin v0.1.0
+# (or run this workflow manually from the Actions tab via workflow_dispatch).
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+# electron-builder needs write access to create the Release and upload assets.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: '--win'
+          - os: macos-latest
+            platform: '--mac'
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck and build renderer + main
+        run: npm run build
+
+      - name: Build installer and publish to GitHub Releases
+        env:
+          # electron-builder reads GH_TOKEN to create/upload the release.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # No Apple signing certs in CI — build an unsigned mac artifact instead
+          # of failing on certificate discovery. (Windows build is unaffected.)
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: npx electron-builder ${{ matrix.platform }} --publish always
