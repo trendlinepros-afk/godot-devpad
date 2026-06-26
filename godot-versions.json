@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "remoteUpdateUrl": "https://raw.githubusercontent.com/YOUR_GITHUB/devpad/main/godot-versions.json",
+  "versions": [
+    {
+      "id": "godot-4",
+      "label": "Godot 4.x",
+      "executableHint": "Godot_v4",
+      "projectFile": "project.godot",
+      "aiSystemPrompt": "You are an expert Godot 4 game developer. Use GDScript 2.0 syntax only. Never suggest deprecated Godot 3 patterns. The project uses Godot 4.",
+      "launchFlags": ["--path", "{projectDir}"]
+    },
+    {
+      "id": "godot-5",
+      "label": "Godot 5.x",
+      "executableHint": "Godot_v5",
+      "projectFile": "project.godot",
+      "aiSystemPrompt": "You are an expert Godot 5 game developer. Use GDScript 3.0 syntax only.",
+      "launchFlags": ["--path", "{projectDir}"]
+    }
+  ]
+}
