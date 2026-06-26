@@ -144,3 +144,25 @@ export const FileIcon = (p: IconProps) => (
     <polyline points="14 2 14 8 20 8" />
   </svg>
 )
+
+export const NoteIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <polyline points="14 2 14 8 20 8" />
+    <line x1="8" y1="13" x2="16" y2="13" />
+    <line x1="8" y1="17" x2="13" y2="17" />
+  </svg>
+)
+
+export const SearchIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <circle cx="11" cy="11" r="8" />
+    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+  </svg>
+)
+
+export const SparkleIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" />
+  </svg>
+)

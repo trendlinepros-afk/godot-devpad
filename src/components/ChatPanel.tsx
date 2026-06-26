@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import type { ChatMessageInput } from '@shared/types'
+import { Markdown } from './Markdown'
 import { routeMessage } from '../lib/router'
 import { useApp } from '../state/app'
 import { useToast } from './Toast'
@@ -252,33 +249,8 @@ function MessageBubble({
         {isUser ? (
           <div className="markdown-body whitespace-pre-wrap text-sm">{message.content}</div>
         ) : (
-          <div className="markdown-body">
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={{
-                code(props) {
-                  const { children, className, node, ...rest } = props
-                  const match = /language-(\w+)/.exec(className || '')
-                  const isBlock = className?.includes('language-')
-                  return isBlock && match ? (
-                    <SyntaxHighlighter
-                      style={oneDark as Record<string, React.CSSProperties>}
-                      language={match[1]}
-                      PreTag="div"
-                      customStyle={{ fontSize: '0.8rem', margin: 0 }}
-                    >
-                      {String(children).replace(/\n$/, '')}
-                    </SyntaxHighlighter>
-                  ) : (
-                    <code className={className} {...rest}>
-                      {children}
-                    </code>
-                  )
-                },
-              }}
-            >
-              {message.content}
-            </ReactMarkdown>
+          <div>
+            <Markdown>{message.content}</Markdown>
             {message.needsSettings && (
               <button
                 onClick={onOpenSettings}

@@ -104,6 +104,40 @@ function buildManifest() {
           },
         },
       },
+      {
+        name: 'get_project_notes',
+        description:
+          "Return the developer's project notes (current state, goals, and future plans) that are shared as AI context. Read these first to understand the bigger picture of what the project is and where it's headed.",
+        method: 'POST',
+        path: '/get_project_notes',
+        input_schema: {
+          type: 'object',
+          properties: {
+            all: {
+              type: 'boolean',
+              description: 'Include notes not pinned for AI (default false).',
+            },
+          },
+          required: [],
+        },
+        output_schema: {
+          type: 'object',
+          properties: {
+            notes: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  title: { type: 'string' },
+                  content: { type: 'string' },
+                  pinnedToAi: { type: 'boolean' },
+                },
+              },
+            },
+          },
+        },
+      },
     ],
   }
 }
@@ -186,6 +220,20 @@ function buildApp(): Express {
       godotVersion: version?.label ?? cfg.activeVersionId,
       activeProfile: profile?.name ?? cfg.activeProfileId,
     })
+  })
+
+  a.post('/get_project_notes', (req: Request, res: Response) => {
+    const includeAll = req.body?.all === true
+    const notes = (getConfig().notes ?? [])
+      .filter((n) => (includeAll ? true : n.pinnedToAi))
+      .filter((n) => n.title.trim() || n.content.trim())
+      .map((n) => ({
+        id: n.id,
+        title: n.title.trim() || 'Untitled note',
+        content: n.content,
+        pinnedToAi: n.pinnedToAi,
+      }))
+    res.json({ notes })
   })
 
   // Relay endpoint used by the in-app "MCP Mode" profile. DevPad itself does not

@@ -18,6 +18,7 @@ const defaults: DevPadConfig = {
   activeVersionId: 'godot-4',
   activeProfileId: DEFAULT_PROFILE_ID,
   profiles: DEFAULT_PROFILES,
+  notes: [],
   mcpEnabled: false,
   monitorPosition: 'auto',
   windowBounds: { width: 1200, height: 800 },

@@ -20,10 +20,40 @@ function activeProfile(): ModelProfile {
   )
 }
 
-/** The active Godot version's aiSystemPrompt is prepended to every request. */
+/**
+ * Build the shared "project notes" context block from notes the developer has
+ * pinned for AI. This gives every model the bigger picture — current state,
+ * goals and future plans — on every request.
+ */
+function notesContext(): string {
+  const notes = getConfig().notes ?? []
+  const pinned = notes.filter(
+    (n) => n.pinnedToAi && (n.title.trim() || n.content.trim()),
+  )
+  if (pinned.length === 0) return ''
+  const blocks = pinned
+    .map((n) => `### ${n.title.trim() || 'Untitled note'}\n${n.content.trim()}`)
+    .join('\n\n')
+  return [
+    '',
+    '--- PROJECT NOTES (developer-maintained context) ---',
+    'The developer keeps these notes about the project — its current state, goals,',
+    'and things planned for the future. Use them to understand the bigger picture',
+    'and keep your answers consistent with this direction:',
+    '',
+    blocks,
+    '--- END PROJECT NOTES ---',
+  ].join('\n')
+}
+
+/**
+ * The active Godot version's aiSystemPrompt is prepended to every request, with
+ * the developer's pinned project notes appended as shared context.
+ */
 function systemPrompt(): string {
   const cfg = getConfig()
-  return findVersionById(cfg.activeVersionId)?.aiSystemPrompt ?? ''
+  const versionPrompt = findVersionById(cfg.activeVersionId)?.aiSystemPrompt ?? ''
+  return `${versionPrompt}${notesContext()}`
 }
 
 function keys(): ProviderKeys {

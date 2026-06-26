@@ -113,6 +113,22 @@ export interface FileNode {
   children?: FileNode[]
 }
 
+// ── Notes ─────────────────────────────────────────────────────────────────────
+
+export interface Note {
+  id: string
+  title: string
+  /** Markdown body. */
+  content: string
+  /**
+   * When true the note is shared as context with EVERY AI request (and exposed
+   * over the MCP server) so all models understand the bigger picture / roadmap.
+   */
+  pinnedToAi: boolean
+  createdAt: number
+  updatedAt: number
+}
+
 // ── MCP server ───────────────────────────────────────────────────────────────
 
 export interface McpStatus {
@@ -139,6 +155,7 @@ export interface DevPadConfig {
   activeVersionId: string
   activeProfileId: string
   profiles: ModelProfile[]
+  notes: Note[]
   mcpEnabled: boolean
   monitorPosition: MonitorPosition
   windowBounds?: { width: number; height: number; x?: number; y?: number }

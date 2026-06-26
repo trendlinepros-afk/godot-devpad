@@ -34,6 +34,23 @@ Godot executable, and at least one API key.
 | 7 | Local MCP server on port 3727 | `electron/mcp-server.ts` |
 | 8 | Godot version manager (local + silent remote merge) | `godot-versions.json`, `electron/versions.ts` |
 | 9 | Multi-monitor window positioning | `electron/main.ts` (`applyMonitorPosition`) |
+| 10 | Notes hub (markdown, shared AI context) | `src/components/NotesList.tsx`, `src/components/NoteEditor.tsx`, `src/lib/notes.ts` |
+
+## Notes — shared AI context
+
+DevPad has a built-in notes hub (left sidebar → **Notes** tab) so ideas, todos,
+and plans live in one place instead of scattered across files. Notes are written
+in markdown with a formatting toolbar and live preview.
+
+Each note has an **AI** toggle. Notes that are pinned for AI are:
+
+- **prepended as context to every AI request** (after the Godot version's system
+  prompt) so all models understand the current state, goals, and future
+  direction — see `notesContext()` in `electron/ai/router.ts`; and
+- **exposed over the MCP server** via the `get_project_notes` tool, so an
+  external Claude Code client can read the same bigger picture.
+
+Notes are stored locally in electron-store and autosaved as you type.
 
 ## Architecture notes
 
