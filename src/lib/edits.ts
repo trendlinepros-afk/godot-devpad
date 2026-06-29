@@ -1,7 +1,9 @@
-// Parses assistant replies into text + edit segments. The AI emits file edits as
-// fenced ```zirtola-edit path="res://…"  blocks (see EDIT_PROTOCOL_PROMPT in
-// electron/ai/router.ts); we split those out so the chat can render them as
-// reviewable diff cards instead of raw code.
+import type { SceneEditProposal } from '@shared/types'
+
+// Parses assistant replies into text + edit + scene segments. The AI emits:
+//   ```zirtola-edit path="res://…"   → a full-file write (diff card)
+//   ```zirtola-scene                 → JSON scene operations (scene card)
+// so the chat can render them as reviewable cards instead of raw code.
 
 export interface TextSegment {
   type: 'text'
@@ -12,29 +14,46 @@ export interface EditSegment {
   path: string
   contents: string
 }
-export type Segment = TextSegment | EditSegment
+export interface SceneSegment {
+  type: 'scene'
+  proposal: SceneEditProposal
+}
+export type Segment = TextSegment | EditSegment | SceneSegment
 
-// path="..." or path='...'; tolerate extra whitespace and an optional language hint.
-const EDIT_RE = /```zirtola-edit\s+path=["']([^"']+)["'][^\n]*\r?\n([\s\S]*?)```/g
+const BLOCK_RE =
+  /```zirtola-(edit|scene)(?:\s+path=["']([^"']+)["'])?[^\n]*\r?\n([\s\S]*?)```/g
 
 export function parseSegments(content: string): Segment[] {
   const segments: Segment[] = []
   let lastIndex = 0
   let match: RegExpExecArray | null
 
-  EDIT_RE.lastIndex = 0
-  while ((match = EDIT_RE.exec(content)) !== null) {
+  BLOCK_RE.lastIndex = 0
+  while ((match = BLOCK_RE.exec(content)) !== null) {
     if (match.index > lastIndex) {
       const text = content.slice(lastIndex, match.index)
       if (text.trim()) segments.push({ type: 'text', value: text })
     }
-    segments.push({
-      type: 'edit',
-      path: match[1].trim(),
-      // Drop the single trailing newline before the closing fence.
-      contents: match[2].replace(/\n$/, ''),
-    })
-    lastIndex = EDIT_RE.lastIndex
+
+    const kind = match[1]
+    const body = match[3]
+    if (kind === 'edit') {
+      segments.push({ type: 'edit', path: (match[2] ?? '').trim(), contents: body.replace(/\n$/, '') })
+    } else {
+      // scene
+      try {
+        const proposal = JSON.parse(body) as SceneEditProposal
+        if (proposal && Array.isArray(proposal.ops)) {
+          segments.push({ type: 'scene', proposal })
+        } else {
+          segments.push({ type: 'text', value: match[0] })
+        }
+      } catch {
+        // Malformed JSON — show it as text so nothing is lost.
+        segments.push({ type: 'text', value: match[0] })
+      }
+    }
+    lastIndex = BLOCK_RE.lastIndex
   }
 
   if (lastIndex < content.length) {
@@ -42,12 +61,11 @@ export function parseSegments(content: string): Segment[] {
     if (text.trim()) segments.push({ type: 'text', value: text })
   }
 
-  // If nothing matched, return the whole thing as one text segment.
   if (segments.length === 0) segments.push({ type: 'text', value: content })
   return segments
 }
 
 export function hasEdits(content: string): boolean {
-  EDIT_RE.lastIndex = 0
-  return EDIT_RE.test(content)
+  BLOCK_RE.lastIndex = 0
+  return BLOCK_RE.test(content)
 }

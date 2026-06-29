@@ -1,0 +1,34 @@
+name: CI
+
+# Catches regressions before a release tag: typecheck + production build on every
+# push and pull request. Kept separate from release.yml (which only runs on tags).
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        # Electron's binary isn't needed just to typecheck + build the bundles.
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Build (renderer + main + preload)
+        run: npm run build:renderer

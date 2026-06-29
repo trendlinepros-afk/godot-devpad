@@ -4,6 +4,7 @@ import { findVersionById } from '../versions'
 import { findProfile, DEFAULT_PROFILE_ID } from '../../src/lib/profiles'
 import { modelLabel } from '../../src/lib/models'
 import { callProvider, MissingKeyError, ProviderKeys } from './providers'
+import { getBridgeStatus } from '../bridge-server'
 
 export const MCP_PORT = 3727
 
@@ -56,6 +57,20 @@ function systemPrompt(): string {
   return `${versionPrompt}${notesContext()}`
 }
 
+// Plan mode: collaborate on a plan, never touch files.
+const PLAN_PROMPT = `
+
+--- PLAN MODE ---
+You are in PLAN MODE. Do NOT edit any files or scenes and do NOT output
+zirtola-edit or zirtola-scene blocks. Instead, collaborate with the developer to
+shape a clear plan:
+- Ask brief clarifying questions when the request is ambiguous.
+- Propose an approach and discuss trade-offs.
+- Keep a running, numbered plan and refine it as the developer responds.
+End your message with a concise "## Plan" section listing the concrete steps
+(files to create/modify, nodes to add, assets needed). When the developer
+approves, they will switch to Build mode to execute it.`
+
 // Instructs the model how to propose direct file edits that Zirtola renders as
 // reviewable diffs the developer can apply with one click. Appended to the
 // system prompt for code-capable tasks (chat / file_analysis / vision_to_code).
@@ -75,9 +90,36 @@ Rules:
 - Only use a zirtola-edit block when you actually want to change a file on disk. For illustrative code the developer should NOT apply, use a normal \`\`\`gdscript block instead.
 - The developer reviews a diff and approves each change before it is written, so prefer complete, working files.`
 
-/** System prompt for code-capable tasks: base prompt + the edit protocol. */
-function codeSystemPrompt(): string {
-  return `${systemPrompt()}${EDIT_PROTOCOL_PROMPT}`
+// Instructs the model how to propose scene changes that are applied THROUGH the
+// Godot editor (safe) rather than by hand-editing .tscn. Only offered when the
+// editor bridge is connected.
+const SCENE_PROTOCOL_PROMPT = `
+
+--- EDITING SCENES ---
+The Godot editor is connected, so you can also change the OPEN scene safely. To
+do so, output a fenced block:
+
+\`\`\`zirtola-scene
+{ "scene": "res://levels/main.tscn", "ops": [
+  { "op": "add_node", "type": "Sprite2D", "name": "Player", "parent": ".", "properties": { "position": { "__type": "Vector2", "values": [100, 50] } }, "script": "res://player.gd" },
+  { "op": "set_property", "node": "Player", "property": "visible", "value": true },
+  { "op": "attach_script", "node": "Player", "script": "res://player.gd" },
+  { "op": "remove_node", "node": "OldEnemy" }
+] }
+\`\`\`
+
+Rules:
+- "scene" is optional; omit to edit the currently open scene.
+- Node paths are relative to the scene root ("." is the root).
+- Typed values use { "__type": "Vector2"|"Vector3"|"Color"|"NodePath", "values": [...] }.
+- The developer reviews and applies; the editor validates and saves the scene.
+- Use zirtola-edit (full file) for scripts and zirtola-scene for node structure.`
+
+/** System prompt for code-capable tasks, varying by mode. */
+function codeSystemPrompt(mode: 'plan' | 'build'): string {
+  if (mode === 'plan') return `${systemPrompt()}${PLAN_PROMPT}`
+  const sceneProtocol = getBridgeStatus().connected ? SCENE_PROTOCOL_PROMPT : ''
+  return `${systemPrompt()}${EDIT_PROTOCOL_PROMPT}${sceneProtocol}`
 }
 
 function keys(): ProviderKeys {
@@ -110,7 +152,7 @@ function missingKeyResponse(err: MissingKeyError): AiResponse {
 export async function route(req: AiRequest): Promise<AiResponse> {
   const profile = activeProfile()
   const sys = systemPrompt()
-  const codeSys = codeSystemPrompt()
+  const codeSys = codeSystemPrompt(req.mode ?? 'build')
   const k = keys()
 
   try {

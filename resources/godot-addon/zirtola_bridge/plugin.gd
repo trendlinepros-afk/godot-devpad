@@ -107,8 +107,120 @@ func _dispatch(method: String, params: Dictionary):
 			return { "ok": true }
 		"capture_viewport":
 			return _capture_viewport()
+		"apply_scene_ops":
+			return _apply_scene_ops(params)
 		_:
 			return { "__error": "Unknown method: %s" % method }
+
+# --- Scene editing -----------------------------------------------------------
+# Applies a list of structured operations to the open scene THROUGH the editor,
+# so the engine validates everything and writes a correct .tscn — far safer than
+# letting an AI hand-edit the scene file's custom text format.
+
+func _apply_scene_ops(params: Dictionary) -> Dictionary:
+	var ei := get_editor_interface()
+	var scene_path := String(params.get("scene", ""))
+	if scene_path != "":
+		ei.open_scene_from_path(scene_path)
+	var root := ei.get_edited_scene_root()
+	if root == null:
+		return { "__error": "No scene is open to edit." }
+	var ops: Array = params.get("ops", [])
+	var applied := 0
+	for op in ops:
+		if typeof(op) != TYPE_DICTIONARY:
+			return { "__error": "Op %d is not an object." % applied }
+		var err := _apply_one(root, op)
+		if err != "":
+			return { "__error": "Op %d (%s) failed: %s" % [applied, String(op.get("op", "?")), err] }
+		applied += 1
+	ei.save_scene()
+	return { "ok": true, "applied": applied }
+
+func _resolve(root: Node, op: Dictionary) -> Node:
+	var p := String(op.get("node", op.get("path", "")))
+	if p == "" or p == ".":
+		return root
+	return root.get_node_or_null(NodePath(p))
+
+func _coerce(v):
+	if typeof(v) == TYPE_DICTIONARY and v.has("__type"):
+		var t := String(v["__type"])
+		var a: Array = v.get("values", [])
+		match t:
+			"Vector2":
+				return Vector2(a[0], a[1])
+			"Vector2i":
+				return Vector2i(a[0], a[1])
+			"Vector3":
+				return Vector3(a[0], a[1], a[2])
+			"Color":
+				if a.size() >= 4:
+					return Color(a[0], a[1], a[2], a[3])
+				return Color(a[0], a[1], a[2])
+			"NodePath":
+				return NodePath(String(v.get("value", "")))
+			_:
+				return null
+	return v
+
+func _apply_one(root: Node, op: Dictionary) -> String:
+	var kind := String(op.get("op", ""))
+	match kind:
+		"add_node":
+			var type := String(op.get("type", ""))
+			if not ClassDB.class_exists(type) or not ClassDB.can_instantiate(type):
+				return "unknown or non-instantiable type '%s'" % type
+			var obj = ClassDB.instantiate(type)
+			if obj == null or not (obj is Node):
+				return "could not instantiate '%s'" % type
+			var node := obj as Node
+			if op.has("name"):
+				node.name = String(op["name"])
+			var parent := root
+			var parent_path := String(op.get("parent", ""))
+			if parent_path != "":
+				parent = root.get_node_or_null(NodePath(parent_path))
+				if parent == null:
+					return "parent not found: %s" % parent_path
+			parent.add_child(node)
+			node.owner = root
+			if op.has("properties") and typeof(op["properties"]) == TYPE_DICTIONARY:
+				for k in op["properties"].keys():
+					node.set(String(k), _coerce(op["properties"][k]))
+			if String(op.get("script", "")) != "":
+				var scr = load(String(op["script"]))
+				if scr != null:
+					node.set_script(scr)
+			return ""
+		"set_property":
+			var n := _resolve(root, op)
+			if n == null:
+				return "node not found"
+			if not op.has("property"):
+				return "missing 'property'"
+			n.set(String(op["property"]), _coerce(op.get("value", null)))
+			return ""
+		"attach_script":
+			var n2 := _resolve(root, op)
+			if n2 == null:
+				return "node not found"
+			var scr2 = load(String(op.get("script", "")))
+			if scr2 == null:
+				return "script not found: %s" % String(op.get("script", ""))
+			n2.set_script(scr2)
+			return ""
+		"remove_node":
+			var n3 := _resolve(root, op)
+			if n3 == null:
+				return "node not found"
+			if n3 == root:
+				return "cannot remove the scene root"
+			n3.get_parent().remove_child(n3)
+			n3.queue_free()
+			return ""
+		_:
+			return "unknown op '%s'" % kind
 
 func _node_to_dict(node: Node) -> Dictionary:
 	var d := {

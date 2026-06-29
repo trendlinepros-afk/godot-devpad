@@ -66,6 +66,8 @@ export interface ChatMessageInput {
   content: string
 }
 
+export type ChatMode = 'plan' | 'build'
+
 export interface AiRequest {
   /** The user's text prompt. May be empty when only a screenshot is supplied. */
   text: string
@@ -75,6 +77,11 @@ export interface AiRequest {
   history?: ChatMessageInput[]
   /** When true the router uses the file_analysis task slot. */
   fileAnalysis?: boolean
+  /**
+   * 'plan' = collaborate on a plan, never emit file/scene edits.
+   * 'build' (default) = may emit zirtola-edit / zirtola-scene blocks.
+   */
+  mode?: ChatMode
 }
 
 export interface AiResponse {
@@ -221,6 +228,36 @@ export interface GitCheckpoint {
 
 export interface GitState {
   repo: boolean
+}
+
+// ── Scene editing (via the editor addon) ─────────────────────────────────────
+
+export interface SceneOp {
+  op: 'add_node' | 'set_property' | 'attach_script' | 'remove_node'
+  /** Target node path within the scene (for set_property/attach_script/remove_node). */
+  node?: string
+  /** For add_node. */
+  type?: string
+  name?: string
+  parent?: string
+  properties?: Record<string, unknown>
+  /** For set_property. */
+  property?: string
+  value?: unknown
+  /** For add_node / attach_script. */
+  script?: string
+}
+
+export interface SceneEditProposal {
+  /** res:// scene to open before applying (optional; defaults to current). */
+  scene?: string
+  ops: SceneOp[]
+}
+
+export interface ApplySceneOpsResult {
+  ok: boolean
+  applied?: number
+  error?: string
 }
 
 // ── Asset generation ─────────────────────────────────────────────────────────

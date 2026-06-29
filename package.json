@@ -13,6 +13,7 @@
     "build:renderer": "vite build",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
+    "eval:models": "node scripts/gdscript-eval.mjs",
     "dist": "npm run build && electron-builder"
   },
   "dependencies": {

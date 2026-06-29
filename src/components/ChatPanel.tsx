@@ -8,6 +8,7 @@ import { chatBus } from '../state/chatBus'
 import { findProfile } from '../lib/profiles'
 import { parseSegments } from '../lib/edits'
 import { EditCard } from './EditCard'
+import { SceneEditCard } from './SceneEditCard'
 import { PaperclipIcon, SendIcon, XIcon, TrashIcon } from './Icons'
 
 interface ChatMessage {
@@ -32,6 +33,7 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
   const [screenshot, setScreenshot] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [lastModel, setLastModel] = useState<string | null>(null)
+  const [mode, setMode] = useState<'plan' | 'build'>('build')
   const counter = useRef(0)
   const feedRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -100,7 +102,7 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
       setScreenshot(null)
       setBusy(true)
 
-      const res = await routeMessage({ text, screenshot: attached, history })
+      const res = await routeMessage({ text, screenshot: attached, history, mode })
 
       setBusy(false)
       if (res.ok) {
@@ -122,12 +124,25 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
         ])
       }
     },
-    [input, screenshot, busy, messages],
+    [input, screenshot, busy, messages, mode],
   )
 
   // Keep a ref to the latest send so the chatBus listener can submit.
   const sendRef = useRef(send)
   sendRef.current = send
+
+  // Approve the plan and switch to Build mode to execute it.
+  const approvePlan = () => {
+    setMode('build')
+    // Defer so `mode` is 'build' before the request is built.
+    setTimeout(
+      () =>
+        sendRef.current({
+          text: 'The plan looks good. Implement it now — make the file and scene edits.',
+        }),
+      0,
+    )
+  }
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -145,9 +160,34 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
     <div className="flex h-full flex-col bg-panel-900">
       {/* Header with model badge + clear */}
       <div className="flex h-9 shrink-0 items-center justify-between border-b border-panel-600 px-3">
-        <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-          AI Chat
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            AI Chat
+          </span>
+          {/* Plan / Build mode */}
+          <div className="flex overflow-hidden rounded-md border border-panel-600">
+            {(['plan', 'build'] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setMode(m)}
+                title={
+                  m === 'plan'
+                    ? 'Plan mode: discuss and refine a plan, no edits'
+                    : 'Build mode: the AI can propose file & scene edits'
+                }
+                className={`px-2.5 py-0.5 text-xs capitalize ${
+                  mode === m
+                    ? m === 'plan'
+                      ? 'bg-amber-600 text-white'
+                      : 'bg-accent text-white'
+                    : 'bg-panel-700 text-slate-300 hover:bg-panel-600'
+                }`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="flex items-center gap-2">
           {lastModel && (
             <span className="flex items-center gap-1.5 rounded-full border border-panel-600 bg-panel-800 px-2.5 py-0.5 text-xs text-slate-300">
@@ -193,6 +233,20 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
 
       {/* Composer */}
       <div className="shrink-0 border-t border-panel-600 bg-panel-850 p-3">
+        {mode === 'plan' && (
+          <div className="mb-2 flex items-center gap-2 rounded-md border border-amber-600/40 bg-amber-950/20 px-3 py-1.5 text-xs text-amber-200">
+            <span className="flex-1">
+              Plan mode — discuss the approach. The AI won't edit files until you build.
+            </span>
+            <button
+              onClick={approvePlan}
+              disabled={busy || messages.length === 0}
+              className="shrink-0 rounded-md bg-amber-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-amber-500 disabled:opacity-50"
+            >
+              Approve &amp; Build
+            </button>
+          </div>
+        )}
         {screenshot && (
           <div className="relative mb-2 inline-block">
             <img
@@ -250,7 +304,7 @@ function MessageBubble({
 }) {
   const isUser = message.role === 'user'
   const segments = !isUser && !message.error ? parseSegments(message.content) : null
-  const containsEdit = segments?.some((s) => s.type === 'edit') ?? false
+  const containsEdit = segments?.some((s) => s.type === 'edit' || s.type === 'scene') ?? false
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div
@@ -277,6 +331,8 @@ function MessageBubble({
               segments.map((seg, i) =>
                 seg.type === 'edit' ? (
                   <EditCard key={i} path={seg.path} contents={seg.contents} />
+                ) : seg.type === 'scene' ? (
+                  <SceneEditCard key={i} proposal={seg.proposal} />
                 ) : (
                   <Markdown key={i}>{seg.value}</Markdown>
                 ),

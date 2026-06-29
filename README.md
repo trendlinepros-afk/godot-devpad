@@ -52,6 +52,34 @@ never coded), the launcher shows a **"Set up Godot"** assistant that:
 It's also available anytime from **Settings → Godot**, with a manual file picker
 and an "open the download page" fallback.
 
+## Plan mode
+
+The chat has a **Plan / Build** toggle. In **Plan mode** the AI never edits
+files — it asks clarifying questions and refines a numbered plan (ending in a
+`## Plan` section). When you're happy, **Approve & Build** switches to Build mode
+and tells the AI to execute it. In **Build mode** the AI may propose file and
+scene edits. The mode is sent on each request (`AiRequest.mode`) and selects the
+system prompt in `electron/ai/router.ts`.
+
+## Scene editing through the editor
+
+When the Godot editor bridge is connected, Build mode also lets the AI change the
+open **scene** safely. It emits a `zirtola-scene` block of structured ops
+(`add_node` / `set_property` / `attach_script` / `remove_node`) which render as a
+**SceneEditCard**. *Apply in editor* takes a checkpoint, then runs the ops
+through the addon's `apply_scene_ops` — Godot validates and saves the `.tscn`, so
+the AI never hand-edits the scene's custom text format. Scripts still use
+`zirtola-edit` (full file); node structure uses `zirtola-scene`.
+
+## Model evaluation
+
+`npm run eval:models` runs `scripts/gdscript-eval.mjs`: a suite of Godot-4 coding
+tasks scored with regex assertions that catch Godot 3 → 4 dialect drift (e.g.
+`@export` vs `export`, `instantiate()` vs `instance()`, `await` vs `yield`,
+`create_tween()` vs `Tween.new()`). It evaluates whichever providers have keys in
+the environment and prints a per-category winner so profile defaults can be set
+from data. CI (`.github/workflows/ci.yml`) typechecks + builds every push/PR.
+
 ## Agentic edits + checkpoints
 
 Zirtola can write your game, not just talk about it. For code tasks the AI is told
