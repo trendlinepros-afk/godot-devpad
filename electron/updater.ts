@@ -60,7 +60,7 @@ export function initUpdater(sender: Sender): void {
       defaultId: 0,
       cancelId: 1,
       title: 'Update ready',
-      message: `DevPad ${info.version} has been downloaded.`,
+      message: `Zirtola ${info.version} has been downloaded.`,
       detail: 'Restart now to install the update, or it will be applied next time you quit.',
     })
     if (result.response === 0) {

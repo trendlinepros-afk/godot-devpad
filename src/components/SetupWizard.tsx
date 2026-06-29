@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useApp } from '../state/app'
 import { detectVersionFromPath } from '../lib/godot-versions'
+import { GodotSetup } from './GodotSetup'
 import { CheckIcon } from './Icons'
 
 // Shown on first launch when no config exists. Walks through project folder,
@@ -26,10 +27,6 @@ export function SetupWizard({ onDone }: Props) {
   const pickFolder = async () => {
     const path = await window.devpad.dialog.pickFolder({ title: 'Select your Godot project folder' })
     if (path) setProjectDir(path)
-  }
-  const pickExe = async () => {
-    const path = await window.devpad.dialog.pickFile({ title: 'Select the Godot executable' })
-    if (path) setExePath(path)
   }
 
   const recents = (dir: string) => (dir ? [dir] : [])
@@ -67,9 +64,9 @@ export function SetupWizard({ onDone }: Props) {
         {/* Progress */}
         <div className="flex items-center gap-2 border-b border-panel-600 px-6 py-4">
           <span className="grid h-7 w-7 place-items-center rounded bg-accent text-sm font-bold text-white">
-            D
+            Z
           </span>
-          <span className="font-semibold text-slate-100">DevPad Setup</span>
+          <span className="font-semibold text-slate-100">Zirtola Setup</span>
           <div className="flex-1" />
           <span className="text-xs text-slate-500">
             Step {step} of {totalSteps}
@@ -79,10 +76,10 @@ export function SetupWizard({ onDone }: Props) {
         <div className="px-6 py-6">
           {step === 1 && (
             <div>
-              <h2 className="mb-2 text-lg font-semibold text-slate-100">Welcome to DevPad</h2>
+              <h2 className="mb-2 text-lg font-semibold text-slate-100">Welcome to Zirtola</h2>
               <p className="mb-3 text-sm leading-relaxed text-slate-400">
-                DevPad is a local-first companion for Godot game development. It runs alongside
-                Godot on a second monitor and gives you:
+                Zirtola is the AI Video Game Editor — a local-first companion for building games in
+                Godot. It runs alongside Godot on a second monitor and gives you:
               </p>
               <ul className="mb-2 space-y-1.5 text-sm text-slate-300">
                 <li>▶ A one-click launcher with F5/F6/F7 global hotkeys</li>
@@ -100,7 +97,7 @@ export function SetupWizard({ onDone }: Props) {
             <div>
               <h2 className="mb-2 text-lg font-semibold text-slate-100">Project Folder</h2>
               <p className="mb-4 text-sm text-slate-400">
-                Point DevPad at your Godot project (the folder containing{' '}
+                Point Zirtola at your Godot project (the folder containing{' '}
                 <code className="text-slate-300">project.godot</code>).
               </p>
               <div className="flex gap-2">
@@ -117,28 +114,32 @@ export function SetupWizard({ onDone }: Props) {
 
           {step === 3 && (
             <div>
-              <h2 className="mb-2 text-lg font-semibold text-slate-100">Godot Executable</h2>
-              <p className="mb-4 text-sm text-slate-400">
-                Choose the Godot executable DevPad should launch. The version is auto-detected from
-                the filename.
-              </p>
-              <div className="flex gap-2">
-                <input readOnly value={exePath} placeholder="No executable selected" className={inputClass} />
-                <button
-                  onClick={pickExe}
-                  className="shrink-0 rounded-md border border-panel-600 bg-panel-700 px-4 text-sm text-slate-200 hover:bg-panel-600"
-                >
-                  Browse
-                </button>
-              </div>
-              {exePath && versions && (
-                <p className="mt-2 text-xs text-slate-500">
-                  Detected version:{' '}
-                  <span className="text-accent-hover">
-                    {versions.versions.find((v) => v.id === detectVersionFromPath(versions, exePath))
-                      ?.label ?? 'unknown (set it later in Settings)'}
-                  </span>
-                </p>
+              {exePath ? (
+                <>
+                  <div className="mb-3 flex items-center gap-2 rounded-lg border border-emerald-600/40 bg-emerald-950/20 px-3 py-2.5 text-sm text-emerald-200">
+                    <CheckIcon width={16} height={16} />
+                    <span className="flex-1">
+                      Godot connected
+                      {versions && (
+                        <>
+                          {' · '}
+                          {versions.versions.find(
+                            (v) => v.id === detectVersionFromPath(versions, exePath),
+                          )?.label ?? 'version set in Settings'}
+                        </>
+                      )}
+                    </span>
+                    <button
+                      onClick={() => setExePath('')}
+                      className="text-xs text-emerald-300/80 underline hover:text-emerald-200"
+                    >
+                      Change
+                    </button>
+                  </div>
+                  <p className="truncate text-[11px] text-slate-500">{exePath}</p>
+                </>
+              ) : (
+                <GodotSetup onConnected={(path) => setExePath(path)} />
               )}
             </div>
           )}
@@ -178,7 +179,7 @@ export function SetupWizard({ onDone }: Props) {
               </div>
               <h2 className="mb-2 text-lg font-semibold text-slate-100">You're all set!</h2>
               <p className="text-sm text-slate-400">
-                DevPad is ready. Press <kbd className="rounded bg-panel-700 px-1.5 py-0.5 text-xs">F5</kbd>{' '}
+                Zirtola is ready. Press <kbd className="rounded bg-panel-700 px-1.5 py-0.5 text-xs">F5</kbd>{' '}
                 anytime to launch Godot.
               </p>
             </div>

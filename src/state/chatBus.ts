@@ -1,17 +1,23 @@
-// Tiny pub/sub so the File Browser's "Send to AI" action can inject text into
-// the Chat Panel's input without threading callbacks through the whole tree.
+// Tiny pub/sub so other panels (File Browser "Send to AI", the Godot console's
+// "Fix this error") can push text into the Chat Panel — optionally submitting it
+// immediately — without threading callbacks through the whole tree.
 
-type Listener = (text: string) => void
+export interface InsertOptions {
+  /** Submit the message immediately instead of just populating the input. */
+  submit?: boolean
+}
+
+type Listener = (text: string, opts?: InsertOptions) => void
 
 let listener: Listener | null = null
 
 export const chatBus = {
-  /** ChatPanel registers its input-setter here on mount. */
+  /** ChatPanel registers its handler here on mount. */
   setListener(l: Listener | null) {
     listener = l
   },
-  /** Insert/append text into the chat input (no-op if the panel isn't mounted). */
-  insert(text: string) {
-    listener?.(text)
+  /** Insert (and optionally submit) text in the chat (no-op if not mounted). */
+  insert(text: string, opts?: InsertOptions) {
+    listener?.(text, opts)
   },
 }

@@ -15,8 +15,12 @@ import {
   restartGodot,
   getStatus as getGodotStatus,
   onStatusChange as onGodotStatusChange,
+  onLogEntry as onGodotLog,
+  getLogs as getGodotLogs,
+  clearLogs as clearGodotLogs,
   GodotLaunchError,
 } from './godot'
+import { detectGodot, downloadGodot, openDownloadPage } from './godot-install'
 import {
   listDir,
   readFileText,
@@ -105,7 +109,7 @@ function createWindow(): void {
     minWidth: 900,
     minHeight: 600,
     backgroundColor: '#0e1116',
-    title: 'DevPad',
+    title: 'Zirtola — The AI Video Game Editor',
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
@@ -126,6 +130,11 @@ function createWindow(): void {
   // Forward Godot process state transitions to the renderer.
   onGodotStatusChange((status) => {
     mainWindow?.webContents.send('godot:statusChange', status)
+  })
+
+  // Stream captured Godot stdout/stderr to the renderer console.
+  onGodotLog((entry) => {
+    mainWindow?.webContents.send('godot:log', entry)
   })
 
   mainWindow.on('resize', () => mainWindow && persistBounds(mainWindow))
@@ -205,6 +214,15 @@ function registerIpc(): void {
     }
   })
   ipcMain.handle('godot:status', () => getGodotStatus())
+  ipcMain.handle('godot:getLogs', () => getGodotLogs())
+  ipcMain.handle('godot:clearLogs', () => clearGodotLogs())
+
+  // Godot install assistant (detect / download / connect)
+  ipcMain.handle('godotInstall:detect', () => detectGodot())
+  ipcMain.handle('godotInstall:download', () =>
+    downloadGodot((p) => mainWindow?.webContents.send('godotInstall:progress', p)),
+  )
+  ipcMain.handle('godotInstall:openDownloadPage', () => openDownloadPage())
 
   // AI
   ipcMain.handle('ai:send', (_e, req: AiRequest) => route(req))

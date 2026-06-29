@@ -1,11 +1,11 @@
-# DevPad — Local Godot Game Dev Companion
+# Zirtola — Local Godot Game Dev Companion
 
-DevPad is a **local-first** Electron + React + TypeScript desktop app that sits
+Zirtola is a **local-first** Electron + React + TypeScript desktop app that sits
 next to the Godot editor (ideally on a second monitor) and gives you a one-click
 launcher, an AI assistant that can see your game window, a project file browser,
 model-routing profiles, and a local MCP server for Claude Code.
 
-DevPad does **not** embed the Godot window — Godot launches as an external
+Zirtola does **not** embed the Godot window — Godot launches as an external
 process in its own window. Nothing is uploaded; all config, profiles and API
 keys are stored locally (electron-store, encrypted at rest).
 
@@ -37,12 +37,33 @@ Godot executable, and at least one API key.
 | 10 | Notes hub (markdown, shared AI context) | `src/components/NotesList.tsx`, `src/components/NoteEditor.tsx`, `src/lib/notes.ts` |
 | 11 | Project launcher (New / Open Recent) | `src/components/Launcher.tsx` |
 | 12 | App self-update (GitHub Releases) | `electron/updater.ts`, `src/components/UpdateControls.tsx` |
+| 13 | Godot output + Problems console (one-click "Fix") | `electron/godot.ts`, `src/components/GodotConsole.tsx` |
+| 14 | Guided Godot install & connect (detect / auto-download) | `electron/godot-install.ts`, `src/components/GodotSetup.tsx` |
+
+## Beginner onboarding — get Godot running with zero setup knowledge
+
+Zirtola is the only thing a newcomer downloads. If they've never used Godot (or
+never coded), the launcher shows a **"Set up Godot"** assistant that:
+
+1. **Detects** any Godot already on the machine (PATH, Steam, common folders).
+2. **Auto-downloads** the latest official Godot for their OS and extracts it.
+3. **Connects** it automatically (and auto-detects the version).
+
+It's also available anytime from **Settings → Godot**, with a manual file picker
+and an "open the download page" fallback.
+
+## The error → fix loop
+
+Zirtola captures Godot's stdout/stderr (it no longer discards it) into a bottom
+**Console** with **Output** and **Problems** tabs. Every runtime error gets a
+one-click **Fix** button that sends the error (and its `res://file:line`) to the
+AI and asks for the corrected code — closing the run → see → fix loop.
 
 ## Launcher & self-update
 
-On open, DevPad shows a **launcher**: **Start New Project** (pick a folder —
-DevPad scaffolds a `project.godot` if the folder doesn't have one), **Open
-Project…**, and an **Open Recent** list. Click the DevPad logo in the toolbar to
+On open, Zirtola shows a **launcher**: **Start New Project** (pick a folder —
+Zirtola scaffolds a `project.godot` if the folder doesn't have one), **Open
+Project…**, and an **Open Recent** list. Click the Zirtola logo in the toolbar to
 return to it.
 
 The launcher's **lower-left** has a **Check for Updates** button (also in
@@ -50,7 +71,7 @@ Settings → App Updates). It uses `electron-updater` against the GitHub release
 provider configured in `package.json` (`build.publish`): on a packaged build it
 checks Releases, auto-downloads a newer installer, and prompts to restart &
 install. In `npm run dev` it reports that updates need an installed build.
-DevPad also does a silent update check on startup.
+Zirtola also does a silent update check on startup.
 
 ### Cutting a release
 
@@ -77,7 +98,7 @@ unsigned build. (You can also trigger it manually from the Actions tab.)
 
 ## Notes — shared AI context
 
-DevPad has a built-in notes hub (left sidebar → **Notes** tab) so ideas, todos,
+Zirtola has a built-in notes hub (left sidebar → **Notes** tab) so ideas, todos,
 and plans live in one place instead of scattered across files. Notes are written
 in markdown with a formatting toolbar and live preview.
 
@@ -104,9 +125,11 @@ Notes are stored locally in electron-store and autosaved as you type.
 - **contextBridge only.** `nodeIntegration` is off and `contextIsolation` is on.
   Every renderer capability is funnelled through `window.devpad` (see
   `electron/preload.ts` and the `DevPadBridge` type in `src/shared/types.ts`).
+  (The runtime bridge name `window.devpad` is kept internally; the product is
+  branded Zirtola.)
 - **The active Godot version's `aiSystemPrompt`** is always prepended as the
   system prompt to every AI request.
-- **MCP Mode** turns DevPad into a local tool *server* that an external Claude
+- **MCP Mode** turns Zirtola into a local tool *server* that an external Claude
   Code client drives via `http://localhost:3727/manifest`. In-app chat with a
   non-MCP profile (Cheap/Balanced/Quality) uses the DeepSeek/Gemini/OpenAI
   providers directly.

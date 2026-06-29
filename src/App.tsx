@@ -6,6 +6,7 @@ import { FileBrowser } from './components/FileBrowser'
 import { NotesList } from './components/NotesList'
 import { NoteEditor } from './components/NoteEditor'
 import { ChatPanel } from './components/ChatPanel'
+import { GodotConsole } from './components/GodotConsole'
 import { SettingsPanel } from './components/SettingsPanel'
 import { ModelProfileEditor } from './components/ModelProfileEditor'
 import { SetupWizard } from './components/SetupWizard'
@@ -35,7 +36,7 @@ function Root() {
   if (!ready || !config) {
     return (
       <div className="grid h-full place-items-center bg-panel-900 text-slate-500">
-        Loading DevPad…
+        Loading Zirtola…
       </div>
     )
   }
@@ -143,6 +144,9 @@ function Shell({
           </div>
         </main>
       </div>
+
+      {/* Bottom console: Godot output + problems with one-click fixes */}
+      <GodotConsole onShowChat={() => setMainView('chat')} />
     </div>
   )
 }

@@ -113,6 +113,46 @@ export interface FileNode {
   children?: FileNode[]
 }
 
+// ── Godot output / logs ──────────────────────────────────────────────────────
+
+export type LogLevel = 'info' | 'warn' | 'error'
+
+export interface GodotLogEntry {
+  id: number
+  level: LogLevel
+  text: string
+  /** res:// path parsed out of a GDScript error, when present. */
+  file?: string
+  line?: number
+  ts: number
+}
+
+// ── Godot install / detection ────────────────────────────────────────────────
+
+export interface DetectedGodot {
+  path: string
+  /** Best-effort version label parsed from the filename, e.g. "v4.3". */
+  version?: string
+  source: string
+}
+
+export type GodotDownloadPhase =
+  | 'idle'
+  | 'resolving'
+  | 'downloading'
+  | 'extracting'
+  | 'done'
+  | 'error'
+
+export interface GodotDownloadProgress {
+  phase: GodotDownloadPhase
+  percent?: number
+  message?: string
+  /** Set when phase === 'done'. */
+  executablePath?: string
+  error?: string
+}
+
 // ── Notes ─────────────────────────────────────────────────────────────────────
 
 export interface Note {
@@ -215,6 +255,18 @@ export interface DevPadBridge {
     restart(): Promise<GodotStatus>
     status(): Promise<GodotStatus>
     onStatusChange(cb: (s: GodotStatus) => void): () => void
+    getLogs(): Promise<GodotLogEntry[]>
+    clearLogs(): Promise<void>
+    onLog(cb: (entry: GodotLogEntry) => void): () => void
+  }
+  godotInstall: {
+    /** Scan the machine for an existing Godot executable. */
+    detect(): Promise<DetectedGodot[]>
+    /** Download + extract the latest stable Godot, returning the exe path. */
+    download(): Promise<GodotDownloadProgress>
+    onDownloadProgress(cb: (p: GodotDownloadProgress) => void): () => void
+    /** Open the official Godot download page in the browser (fallback). */
+    openDownloadPage(): Promise<void>
   }
   ai: {
     send(req: AiRequest): Promise<AiResponse>

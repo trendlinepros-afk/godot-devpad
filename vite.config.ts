@@ -31,6 +31,7 @@ export default defineConfig({
                 'electron-updater',
                 'express',
                 'openai',
+                'adm-zip',
                 '@google/generative-ai',
               ],
             },

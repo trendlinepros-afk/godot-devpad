@@ -36,9 +36,14 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
 
   const activeProfile = config ? findProfile(config.profiles, config.activeProfileId) : undefined
 
-  // Allow the File Browser's "Send to AI" to push file contents into the input.
+  // Let other panels push text into the chat. With { submit:true } (the Godot
+  // console's "Fix" button) the message is sent immediately via sendRef.
   useEffect(() => {
-    chatBus.setListener((text) => {
+    chatBus.setListener((text, opts) => {
+      if (opts?.submit) {
+        sendRef.current({ text })
+        return
+      }
       setInput((prev) => (prev ? `${prev}\n${text}` : text))
       inputRef.current?.focus()
     })
@@ -65,48 +70,55 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
     toast(result.source ? `Captured: ${result.source}` : 'Screenshot attached', 'success')
   }, [toast])
 
-  const send = useCallback(async () => {
-    const text = input.trim()
-    if ((!text && !screenshot) || busy) return
+  const send = useCallback(
+    async (override?: { text?: string }) => {
+      const text = (override?.text ?? input).trim()
+      if ((!text && !screenshot) || busy) return
 
-    const history: ChatMessageInput[] = messages
-      .filter((m) => !m.error)
-      .map((m) => ({ role: m.role, content: m.content }))
+      const history: ChatMessageInput[] = messages
+        .filter((m) => !m.error)
+        .map((m) => ({ role: m.role, content: m.content }))
 
-    const userMsg: ChatMessage = {
-      id: nextId(),
-      role: 'user',
-      content: text || '(screenshot)',
-      screenshot,
-    }
-    setMessages((m) => [...m, userMsg])
-    setInput('')
-    const attached = screenshot
-    setScreenshot(null)
-    setBusy(true)
+      const userMsg: ChatMessage = {
+        id: nextId(),
+        role: 'user',
+        content: text || '(screenshot)',
+        screenshot,
+      }
+      setMessages((m) => [...m, userMsg])
+      setInput('')
+      const attached = screenshot
+      setScreenshot(null)
+      setBusy(true)
 
-    const res = await routeMessage({ text, screenshot: attached, history })
+      const res = await routeMessage({ text, screenshot: attached, history })
 
-    setBusy(false)
-    if (res.ok) {
-      setLastModel(res.modelLabel ?? res.modelId ?? null)
-      setMessages((m) => [
-        ...m,
-        { id: nextId(), role: 'assistant', content: res.text, modelLabel: res.modelLabel },
-      ])
-    } else {
-      setMessages((m) => [
-        ...m,
-        {
-          id: nextId(),
-          role: 'assistant',
-          content: res.error ?? 'Something went wrong.',
-          error: true,
-          needsSettings: res.needsSettings,
-        },
-      ])
-    }
-  }, [input, screenshot, busy, messages])
+      setBusy(false)
+      if (res.ok) {
+        setLastModel(res.modelLabel ?? res.modelId ?? null)
+        setMessages((m) => [
+          ...m,
+          { id: nextId(), role: 'assistant', content: res.text, modelLabel: res.modelLabel },
+        ])
+      } else {
+        setMessages((m) => [
+          ...m,
+          {
+            id: nextId(),
+            role: 'assistant',
+            content: res.error ?? 'Something went wrong.',
+            error: true,
+            needsSettings: res.needsSettings,
+          },
+        ])
+      }
+    },
+    [input, screenshot, busy, messages],
+  )
+
+  // Keep a ref to the latest send so the chatBus listener can submit.
+  const sendRef = useRef(send)
+  sendRef.current = send
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -208,7 +220,7 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
             className="max-h-40 min-h-[2.25rem] flex-1 resize-none rounded-md border border-panel-600 bg-panel-800 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:border-accent focus:outline-none"
           />
           <button
-            onClick={send}
+            onClick={() => send()}
             disabled={busy || (!input.trim() && !screenshot)}
             className="flex h-9 shrink-0 items-center gap-1.5 rounded-md bg-accent px-4 text-sm font-medium text-white transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-panel-600 disabled:text-slate-500"
           >

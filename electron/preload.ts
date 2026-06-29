@@ -4,6 +4,8 @@ import type {
   DevPadBridge,
   DevPadConfig,
   GodotStatus,
+  GodotLogEntry,
+  GodotDownloadProgress,
   MonitorPosition,
   ProviderId,
   UpdateStatus,
@@ -31,6 +33,23 @@ const bridge: DevPadBridge = {
       ipcRenderer.on('godot:statusChange', listener)
       return () => ipcRenderer.removeListener('godot:statusChange', listener)
     },
+    getLogs: () => ipcRenderer.invoke('godot:getLogs'),
+    clearLogs: () => ipcRenderer.invoke('godot:clearLogs'),
+    onLog: (cb: (entry: GodotLogEntry) => void) => {
+      const listener = (_e: unknown, entry: GodotLogEntry) => cb(entry)
+      ipcRenderer.on('godot:log', listener)
+      return () => ipcRenderer.removeListener('godot:log', listener)
+    },
+  },
+  godotInstall: {
+    detect: () => ipcRenderer.invoke('godotInstall:detect'),
+    download: () => ipcRenderer.invoke('godotInstall:download'),
+    onDownloadProgress: (cb: (p: GodotDownloadProgress) => void) => {
+      const listener = (_e: unknown, p: GodotDownloadProgress) => cb(p)
+      ipcRenderer.on('godotInstall:progress', listener)
+      return () => ipcRenderer.removeListener('godotInstall:progress', listener)
+    },
+    openDownloadPage: () => ipcRenderer.invoke('godotInstall:openDownloadPage'),
   },
   ai: {
     send: (req: AiRequest) => ipcRenderer.invoke('ai:send', req),

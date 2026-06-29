@@ -83,9 +83,9 @@ export function Toolbar({ onHome, onOpenSettings, onOpenProfiles }: ToolbarProps
         className="mr-2 flex items-center gap-2 rounded-md px-1.5 py-1 font-semibold tracking-tight hover:bg-panel-700"
       >
         <span className="grid h-6 w-6 place-items-center rounded bg-accent text-xs font-bold text-white">
-          D
+          Z
         </span>
-        <span className="text-slate-100">DevPad</span>
+        <span className="text-slate-100">Zirtola</span>
       </button>
 
       {/* Launcher controls */}

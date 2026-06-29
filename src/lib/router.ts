@@ -25,7 +25,7 @@ export async function routeMessage(req: AiRequest): Promise<AiResponse> {
     return {
       ok: false,
       text: '',
-      error: 'DevPad bridge unavailable. Restart the app.',
+      error: 'Zirtola bridge unavailable. Restart the app.',
     }
   }
   try {

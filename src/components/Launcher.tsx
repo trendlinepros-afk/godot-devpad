@@ -1,6 +1,10 @@
+import { useState } from 'react'
 import { useApp } from '../state/app'
 import { useToast } from './Toast'
 import { UpdateControls } from './UpdateControls'
+import { GodotSetup } from './GodotSetup'
+import { Modal } from './ModelProfileEditor'
+import { detectVersionFromPath } from '../lib/godot-versions'
 import { FolderIcon, FolderOpenIcon, PlusIcon, GearIcon } from './Icons'
 
 interface Props {
@@ -18,10 +22,22 @@ function folderName(p: string): string {
 }
 
 export function Launcher({ onEnter, onOpenSettings }: Props) {
-  const { config, update } = useApp()
+  const { config, versions, update } = useApp()
   const { toast } = useToast()
+  const [showSetup, setShowSetup] = useState(false)
   if (!config) return null
   const recents = config.recentProjects ?? []
+  const godotReady = !!config.godotExecutablePath
+
+  const connectGodot = async (path: string) => {
+    const detected = versions ? detectVersionFromPath(versions, path) : null
+    await update({
+      godotExecutablePath: path,
+      ...(detected ? { activeVersionId: detected } : {}),
+    })
+    setShowSetup(false)
+    toast('Godot is connected — you’re ready to build!', 'success')
+  }
 
   const enterWith = async (dir: string) => {
     const v = await window.devpad.projects.validate(dir)
@@ -73,13 +89,35 @@ export function Launcher({ onEnter, onOpenSettings }: Props) {
         <div className="w-full max-w-3xl">
           <div className="mb-8 flex items-center gap-3">
             <span className="grid h-10 w-10 place-items-center rounded-lg bg-accent text-lg font-bold text-white">
-              D
+              Z
             </span>
             <div>
-              <h1 className="text-xl font-semibold text-slate-100">DevPad</h1>
-              <p className="text-sm text-slate-500">Your Godot game-dev companion</p>
+              <h1 className="text-xl font-semibold text-slate-100">Zirtola</h1>
+              <p className="text-sm text-slate-500">The AI Video Game Editor</p>
             </div>
           </div>
+
+          {/* First-time Godot setup nudge */}
+          {!godotReady && (
+            <div className="mb-6 flex items-center gap-3 rounded-xl border border-accent/40 bg-accent/10 p-4">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-accent text-lg">
+                🎮
+              </span>
+              <div className="flex-1">
+                <div className="font-medium text-slate-100">First, let’s set up Godot</div>
+                <div className="text-xs text-slate-400">
+                  New to game dev? We’ll download and connect the game engine for you — no setup
+                  knowledge needed.
+                </div>
+              </div>
+              <button
+                onClick={() => setShowSetup(true)}
+                className="shrink-0 rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
+              >
+                Set up Godot
+              </button>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             {/* Start new */}
@@ -145,6 +183,14 @@ export function Launcher({ onEnter, onOpenSettings }: Props) {
       <div className="absolute bottom-4 left-4">
         <UpdateControls compact />
       </div>
+
+      {showSetup && (
+        <Modal title="Set up Godot" onClose={() => setShowSetup(false)}>
+          <div className="max-h-[70vh] overflow-auto p-5">
+            <GodotSetup onConnected={connectGodot} />
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }

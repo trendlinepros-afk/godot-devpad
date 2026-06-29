@@ -5,6 +5,8 @@ import { useToast } from './Toast'
 import { detectVersionFromPath } from '../lib/godot-versions'
 import { XIcon, StarIcon, EditIcon, PlusIcon } from './Icons'
 import { UpdateControls } from './UpdateControls'
+import { GodotSetup } from './GodotSetup'
+import { Modal } from './ModelProfileEditor'
 
 type Section = 'ai' | 'godot' | 'mcp' | 'window' | 'versions' | 'updates'
 
@@ -210,7 +212,17 @@ function AiSection({ onOpenProfiles }: { onOpenProfiles: () => void }) {
 function GodotSection() {
   const { config, versions, update } = useApp()
   const { toast } = useToast()
+  const [showSetup, setShowSetup] = useState(false)
   if (!config || !versions) return null
+
+  const connect = async (path: string) => {
+    const detected = detectVersionFromPath(versions, path)
+    await update({
+      godotExecutablePath: path,
+      ...(detected ? { activeVersionId: detected } : {}),
+    })
+    setShowSetup(false)
+  }
 
   const pickExe = async () => {
     const path = await window.devpad.dialog.pickFile({ title: 'Select the Godot executable' })
@@ -245,6 +257,19 @@ function GodotSection() {
           </button>
         </div>
       </Field>
+      <button
+        onClick={() => setShowSetup(true)}
+        className="mb-3 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover"
+      >
+        {config.godotExecutablePath ? 'Set up / Download Godot' : 'Download & set up Godot'}
+      </button>
+      {showSetup && (
+        <Modal title="Set up Godot" onClose={() => setShowSetup(false)}>
+          <div className="max-h-[70vh] overflow-auto p-5">
+            <GodotSetup onConnected={connect} />
+          </div>
+        </Modal>
+      )}
       <Field label="Project Folder">
         <div className="flex gap-2">
           <input readOnly value={config.projectDir} placeholder="Not set" className={inputClass} />
@@ -293,7 +318,7 @@ function McpSection() {
 
   const snippet = `{
   "mcpServers": {
-    "devpad": {
+    "zirtola": {
       "url": "http://localhost:${mcpStatus.port}/manifest"
     }
   }
@@ -311,7 +336,7 @@ function McpSection() {
         <div>
           <div className="text-sm text-slate-200">Enable MCP Server</div>
           <div className="text-xs text-slate-500">
-            Lets Claude Code drive DevPad's tools locally.
+            Lets Claude Code drive Zirtola's tools locally.
           </div>
         </div>
         <button
@@ -405,7 +430,7 @@ function WindowSection() {
         </select>
       </Field>
       <p className="text-xs leading-relaxed text-slate-500">
-        DevPad is designed to sit on a second monitor next to the Godot window. Only monitors that
+        Zirtola is designed to sit on a second monitor next to the Godot window. Only monitors that
         are actually connected are shown. Window size and position are remembered.
       </p>
     </div>
@@ -419,7 +444,7 @@ function UpdatesSection() {
     <div>
       <SectionTitle>App Updates</SectionTitle>
       <p className="mb-4 text-xs leading-relaxed text-slate-500">
-        DevPad checks GitHub Releases for a newer installer. When an update is found it downloads
+        Zirtola checks GitHub Releases for a newer installer. When an update is found it downloads
         automatically and prompts you to restart and install.
       </p>
       <UpdateControls />

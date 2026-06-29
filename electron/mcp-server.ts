@@ -28,9 +28,9 @@ function buildManifest() {
   return {
     schema_version: 'v1',
     name_for_model: 'devpad',
-    name_for_human: 'DevPad — Godot Companion',
+    name_for_human: 'Zirtola — The AI Video Game Editor',
     description_for_model:
-      'Tools for inspecting and controlling a local Godot game project via the DevPad companion app. Capture the game window, read project files, list directories, and restart/stop the running Godot process.',
+      'Tools for inspecting and controlling a local Godot game project via the Zirtola AI game editor. Capture the game window, read project files, list directories, and restart/stop the running Godot process.',
     description_for_human: 'Control and inspect your local Godot project.',
     api: { type: 'mcp', url: `http://localhost:${MCP_PORT}` },
     tools: [
@@ -243,10 +243,10 @@ function buildApp(): Express {
   a.post('/chat', (_req: Request, res: Response) => {
     res.json({
       text:
-        'MCP Mode is active. In this mode DevPad runs as a local tool server for an ' +
-        'external Claude Code client. To chat with Claude through DevPad, point Claude ' +
+        'MCP Mode is active. In this mode Zirtola runs as a local tool server for an ' +
+        'external Claude Code client. To chat with Claude through Zirtola, point Claude ' +
         `Code at the manifest:\n\n\`\`\`\nhttp://localhost:${MCP_PORT}/manifest\n\`\`\`\n\n` +
-        'Then Claude can call DevPad tools (capture the game window, read files, ' +
+        'Then Claude can call Zirtola tools (capture the game window, read files, ' +
         'restart Godot, etc.). For direct in-app chat, switch to a non-MCP profile ' +
         '(Cheap / Balanced / Quality) in the toolbar.',
     })

@@ -16,13 +16,13 @@ export function updateLabel(s: UpdateStatus): string {
     case 'downloaded':
       return `v${s.newVersion} ready to install`
     case 'not-available':
-      return 'DevPad is up to date'
+      return 'Zirtola is up to date'
     case 'unsupported':
       return 'Updates available in installed builds only'
     case 'error':
       return `Update error: ${s.error ?? 'unknown'}`
     default:
-      return s.version ? `DevPad v${s.version}` : 'DevPad'
+      return s.version ? `Zirtola v${s.version}` : 'Zirtola'
   }
 }
 
@@ -39,7 +39,7 @@ export function UpdateControls({ compact = false }: { compact?: boolean }) {
     setBusy(true)
     const result = await window.devpad.updates.check()
     setBusy(false)
-    if (result.state === 'not-available') toast('DevPad is up to date', 'success')
+    if (result.state === 'not-available') toast('Zirtola is up to date', 'success')
     else if (result.state === 'unsupported') toast(result.error ?? updateLabel(result), 'info')
     else if (result.state === 'available' || result.state === 'downloading')
       toast(`Update found: v${result.newVersion} — downloading…`, 'info')

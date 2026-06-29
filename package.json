@@ -1,8 +1,8 @@
 {
-  "name": "devpad",
+  "name": "zirtola",
   "version": "0.1.0",
-  "description": "DevPad — A local-first Godot game development companion app with an integrated AI assistant.",
-  "author": "DevPad",
+  "description": "Zirtola — The AI Video Game Editor. A local-first Godot game development companion with an integrated AI assistant.",
+  "author": "Zirtola",
   "license": "MIT",
   "private": true,
   "main": "dist-electron/main.js",
@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
+    "adm-zip": "^0.5.16",
     "electron-store": "^8.2.0",
     "electron-updater": "^6.3.9",
     "express": "^4.21.2",
@@ -28,6 +29,7 @@
     "remark-gfm": "^4.0.0"
   },
   "devDependencies": {
+    "@types/adm-zip": "^0.5.7",
     "@types/express": "^4.17.21",
     "@types/node": "^22.10.5",
     "@types/react": "^18.3.18",
@@ -45,8 +47,8 @@
     "vite-plugin-electron-renderer": "^0.14.6"
   },
   "build": {
-    "appId": "com.devpad.app",
-    "productName": "DevPad",
+    "appId": "com.zirtola.app",
+    "productName": "Zirtola",
     "files": [
       "dist",
       "dist-electron",
