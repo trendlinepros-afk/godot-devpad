@@ -22,6 +22,13 @@ import {
 } from './godot'
 import { detectGodot, downloadGodot, openDownloadPage } from './godot-install'
 import {
+  startBridgeServer,
+  setBridgeHandlers,
+  getBridgeStatus,
+  bridgeRequest,
+} from './bridge-server'
+import { installAddon } from './godot-addon'
+import {
   listDir,
   readFileText,
   openExternal,
@@ -264,6 +271,13 @@ function registerIpc(): void {
     return result.canceled ? null : (result.filePaths[0] ?? null)
   })
 
+  // Godot editor bridge (addon)
+  ipcMain.handle('bridge:status', () => getBridgeStatus())
+  ipcMain.handle('bridge:installAddon', () => installAddon())
+  ipcMain.handle('bridge:request', (_e, method: string, params?: Record<string, unknown>) =>
+    bridgeRequest(method, params),
+  )
+
   // App self-update
   ipcMain.handle('updates:status', () => getUpdateStatus())
   ipcMain.handle('updates:check', () => checkAppUpdates())
@@ -303,6 +317,13 @@ app.whenReady().then(async () => {
   registerIpc()
   createWindow()
   registerHotkeys()
+
+  // Start the live editor bridge and forward its status/events to the renderer.
+  setBridgeHandlers({
+    onStatus: (s) => mainWindow?.webContents.send('bridge:status', s),
+    onEvent: (e) => mainWindow?.webContents.send('bridge:event', e),
+  })
+  startBridgeServer()
 
   // Wire app self-update events to the renderer, then do a silent startup check.
   initUpdater((status) => mainWindow?.webContents.send('updates:status', status))

@@ -7,6 +7,8 @@ import type {
   GodotStatus,
   GodotLogEntry,
   GodotDownloadProgress,
+  BridgeStatus,
+  BridgeEvent,
   MonitorPosition,
   ProviderId,
   UpdateStatus,
@@ -78,6 +80,22 @@ const bridge: DevPadBridge = {
   mcp: {
     getStatus: () => ipcRenderer.invoke('mcp:status'),
     setEnabled: (enabled: boolean) => ipcRenderer.invoke('mcp:setEnabled', enabled),
+  },
+  bridge: {
+    getStatus: () => ipcRenderer.invoke('bridge:status'),
+    installAddon: () => ipcRenderer.invoke('bridge:installAddon'),
+    request: (method: string, params?: Record<string, unknown>) =>
+      ipcRenderer.invoke('bridge:request', method, params),
+    onStatus: (cb) => {
+      const listener = (_e: unknown, s: BridgeStatus) => cb(s)
+      ipcRenderer.on('bridge:status', listener)
+      return () => ipcRenderer.removeListener('bridge:status', listener)
+    },
+    onEvent: (cb) => {
+      const listener = (_e: unknown, ev: BridgeEvent) => cb(ev)
+      ipcRenderer.on('bridge:event', listener)
+      return () => ipcRenderer.removeListener('bridge:event', listener)
+    },
   },
   updates: {
     getStatus: () => ipcRenderer.invoke('updates:status'),

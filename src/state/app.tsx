@@ -13,6 +13,7 @@ import type {
   GodotVersionsFile,
   McpStatus,
   UpdateStatus,
+  BridgeStatus,
 } from '@shared/types'
 
 // Central renderer state: the persisted config, the Godot version registry, live
@@ -27,6 +28,7 @@ interface AppState {
   godotStatus: GodotStatus
   mcpStatus: McpStatus
   updateStatus: UpdateStatus
+  bridgeStatus: BridgeStatus
   /** Persist a partial config update and refresh the cached copy. */
   update: (partial: Partial<DevPadConfig>) => Promise<void>
   refreshVersions: () => Promise<void>
@@ -62,6 +64,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     state: 'idle',
     version: '',
   })
+  const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus>({
+    connected: false,
+    port: 3728,
+  })
   const [ready, setReady] = useState(false)
 
   const update = useCallback(async (partial: Partial<DevPadConfig>) => {
@@ -80,12 +86,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true
     ;(async () => {
-      const [cfg, vers, status, mcp, upd] = await Promise.all([
+      const [cfg, vers, status, mcp, upd, bridge] = await Promise.all([
         window.devpad.config.getAll(),
         window.devpad.versions.getAll(),
         window.devpad.godot.status(),
         window.devpad.mcp.getStatus(),
         window.devpad.updates.getStatus(),
+        window.devpad.bridge.getStatus(),
       ])
       if (!mounted) return
       setConfig(cfg)
@@ -93,15 +100,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setGodotStatus(status)
       setMcpStatus(mcp)
       setUpdateStatus(upd)
+      setBridgeStatus(bridge)
       setReady(true)
     })()
 
     const offStatus = window.devpad.godot.onStatusChange((s) => setGodotStatus(s))
     const offUpdate = window.devpad.updates.onStatus((s) => setUpdateStatus(s))
+    const offBridge = window.devpad.bridge.onStatus((s) => setBridgeStatus(s))
     return () => {
       mounted = false
       offStatus()
       offUpdate()
+      offBridge()
     }
   }, [])
 
@@ -113,6 +123,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       godotStatus,
       mcpStatus,
       updateStatus,
+      bridgeStatus,
       update,
       refreshVersions,
       refreshMcp,
@@ -125,6 +136,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       godotStatus,
       mcpStatus,
       updateStatus,
+      bridgeStatus,
       update,
       refreshVersions,
       refreshMcp,

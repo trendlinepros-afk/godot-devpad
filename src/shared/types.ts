@@ -223,6 +223,38 @@ export interface GitState {
   repo: boolean
 }
 
+// ── Godot editor bridge (addon) ──────────────────────────────────────────────
+
+export interface BridgeStatus {
+  connected: boolean
+  port: number
+  godotVersion?: string
+  projectName?: string
+}
+
+export interface SceneNode {
+  name: string
+  type: string
+  /** Node path within the edited scene, e.g. "/root/Player/Sprite2D". */
+  path: string
+  /** res:// path of the script attached to this node, if any. */
+  script?: string
+  children: SceneNode[]
+}
+
+/** A push event from the Godot addon (errors, scene changes, etc.). */
+export interface BridgeEvent {
+  type: string
+  [key: string]: unknown
+}
+
+export interface AddonInstallResult {
+  ok: boolean
+  error?: string
+  /** True when the addon was newly written/updated (vs already present). */
+  installed?: boolean
+}
+
 // ── MCP server ───────────────────────────────────────────────────────────────
 
 export interface McpStatus {
@@ -326,6 +358,15 @@ export interface DevPadBridge {
   mcp: {
     getStatus(): Promise<McpStatus>
     setEnabled(enabled: boolean): Promise<McpStatus>
+  }
+  bridge: {
+    getStatus(): Promise<BridgeStatus>
+    /** Install/enable the Zirtola Bridge addon in the active project. */
+    installAddon(): Promise<AddonInstallResult>
+    /** Send a JSON-RPC request to the connected Godot editor addon. */
+    request<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T>
+    onStatus(cb: (s: BridgeStatus) => void): () => void
+    onEvent(cb: (e: BridgeEvent) => void): () => void
   }
   updates: {
     getStatus(): Promise<UpdateStatus>

@@ -32,6 +32,7 @@ export default defineConfig({
                 'express',
                 'openai',
                 'adm-zip',
+                'ws',
                 '@google/generative-ai',
               ],
             },

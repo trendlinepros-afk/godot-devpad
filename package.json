@@ -23,6 +23,7 @@
     "express": "^4.21.2",
     "openai": "^4.77.0",
     "react": "^18.3.1",
+    "ws": "^8.18.0",
     "react-dom": "^18.3.1",
     "react-markdown": "^9.0.1",
     "react-syntax-highlighter": "^15.6.1",
@@ -35,6 +36,7 @@
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@types/react-syntax-highlighter": "^15.5.13",
+    "@types/ws": "^8.5.13",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
     "electron": "^33.3.1",
@@ -55,7 +57,8 @@
       "godot-versions.json"
     ],
     "extraResources": [
-      "godot-versions.json"
+      "godot-versions.json",
+      "resources/**"
     ],
     "publish": [
       {

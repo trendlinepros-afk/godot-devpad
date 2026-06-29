@@ -68,6 +68,21 @@ toolbar's **↺ history** button lists checkpoints and restores any of them (the
 restore itself checkpoints first, so it's undoable). Toggle the safety net in
 **Settings → Godot → Checkpoint before AI edits**.
 
+## Live Godot editor bridge (addon)
+
+The **Engine** tab connects Zirtola to the running Godot editor via a first-party
+addon, so it's engine-aware instead of guessing from OS screenshots.
+
+- Zirtola hosts a WebSocket server on `127.0.0.1:3728` (`electron/bridge-server.ts`).
+- The **Zirtola Bridge** EditorPlugin (`resources/godot-addon/zirtola_bridge/`)
+  is installed into the project's `addons/` and enabled in `project.godot` by
+  `electron/godot-addon.ts` (one click: Engine tab → *Install Bridge addon*).
+- The addon connects back and speaks a tiny JSON-RPC dialect: `get_scene_tree`,
+  `get_project_info`, `run`, `stop`, `reload`, `capture_viewport`.
+- The Engine panel shows the **live scene tree**, a connection indicator, and
+  Run / Stop / Reload / **Capture → chat** (attaches the editor viewport image
+  to the chat composer for the vision model).
+
 ## The error → fix loop
 
 Zirtola captures Godot's stdout/stderr (it no longer discards it) into a bottom

@@ -49,7 +49,14 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
       setInput((prev) => (prev ? `${prev}\n${text}` : text))
       inputRef.current?.focus()
     })
-    return () => chatBus.setListener(null)
+    chatBus.setAttachListener((base64) => {
+      setScreenshot(base64)
+      inputRef.current?.focus()
+    })
+    return () => {
+      chatBus.setListener(null)
+      chatBus.setAttachListener(null)
+    }
   }, [])
 
   // Auto-scroll to the newest message.

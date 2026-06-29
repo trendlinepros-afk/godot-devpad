@@ -5,6 +5,7 @@ import { Toolbar } from './components/Toolbar'
 import { FileBrowser } from './components/FileBrowser'
 import { NotesList } from './components/NotesList'
 import { NoteEditor } from './components/NoteEditor'
+import { EnginePanel } from './components/EnginePanel'
 import { ChatPanel } from './components/ChatPanel'
 import { GodotConsole } from './components/GodotConsole'
 import { SettingsPanel } from './components/SettingsPanel'
@@ -12,7 +13,7 @@ import { ModelProfileEditor } from './components/ModelProfileEditor'
 import { SetupWizard } from './components/SetupWizard'
 import { Launcher } from './components/Launcher'
 
-type LeftTab = 'files' | 'notes'
+type LeftTab = 'files' | 'notes' | 'engine'
 type MainView = 'chat' | 'note'
 type View = 'launcher' | 'app'
 
@@ -106,6 +107,7 @@ function Shell({
             tabs={[
               { key: 'files', label: 'Files' },
               { key: 'notes', label: 'Notes' },
+              { key: 'engine', label: 'Engine' },
             ]}
             active={leftTab}
             onChange={(k) => setLeftTab(k as LeftTab)}
@@ -116,6 +118,9 @@ function Shell({
             </div>
             <div className={`h-full ${leftTab === 'notes' ? '' : 'hidden'}`}>
               <NotesList selectedId={activeNoteId} onSelect={openNote} />
+            </div>
+            <div className={`h-full ${leftTab === 'engine' ? '' : 'hidden'}`}>
+              <EnginePanel onShowChat={() => setMainView('chat')} />
             </div>
           </div>
         </aside>
