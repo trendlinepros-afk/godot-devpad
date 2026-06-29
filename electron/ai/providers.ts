@@ -158,6 +158,30 @@ export async function callProvider(
   }
 }
 
+/**
+ * Generate an image from a text prompt via OpenAI's image model. Returns a
+ * base64 PNG. `transparent` requests a transparent background (sprites/icons).
+ */
+export async function generateImage(
+  prompt: string,
+  size: string,
+  apiKey: string,
+  transparent: boolean,
+): Promise<string> {
+  if (!apiKey) throw new MissingKeyError('openai')
+  const client = new OpenAI({ apiKey })
+  const result = await client.images.generate({
+    model: 'gpt-image-1',
+    prompt,
+    size: size as '1024x1024' | '1024x1536' | '1536x1024',
+    n: 1,
+    ...(transparent ? { background: 'transparent' } : {}),
+  })
+  const b64 = result.data?.[0]?.b64_json
+  if (!b64) throw new Error('The image model returned no image.')
+  return b64
+}
+
 /** Lightweight connectivity ping used by the "Test Connection" buttons. */
 export async function testProvider(
   provider: ProviderId,

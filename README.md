@@ -68,6 +68,16 @@ toolbar's **↺ history** button lists checkpoints and restores any of them (the
 restore itself checkpoints first, so it's undoable). Toggle the safety net in
 **Settings → Godot → Checkpoint before AI edits**.
 
+## Asset Studio — generate game art
+
+The toolbar's image button opens **Asset Studio**: describe a sprite, tile,
+background, icon, or concept and generate it (OpenAI image model,
+`generateImage` in `electron/ai/providers.ts`). Sprites/icons/tiles use a
+transparent background. **Save to Project** writes the PNG to
+`res://assets/generated/` (`electron/assets.ts`) where Godot auto-imports it as a
+texture; **Send to chat** attaches it for the vision model to riff on. Needs an
+OpenAI API key.
+
 ## Live Godot editor bridge (addon)
 
 The **Engine** tab connects Zirtola to the running Godot editor via a first-party

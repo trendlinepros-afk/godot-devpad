@@ -9,6 +9,7 @@ import type {
   GodotDownloadProgress,
   BridgeStatus,
   BridgeEvent,
+  GenerateAssetRequest,
   MonitorPosition,
   ProviderId,
   UpdateStatus,
@@ -80,6 +81,10 @@ const bridge: DevPadBridge = {
   mcp: {
     getStatus: () => ipcRenderer.invoke('mcp:status'),
     setEnabled: (enabled: boolean) => ipcRenderer.invoke('mcp:setEnabled', enabled),
+  },
+  assets: {
+    generate: (req: GenerateAssetRequest) => ipcRenderer.invoke('assets:generate', req),
+    save: (base64: string, name: string) => ipcRenderer.invoke('assets:save', base64, name),
   },
   bridge: {
     getStatus: () => ipcRenderer.invoke('bridge:status'),

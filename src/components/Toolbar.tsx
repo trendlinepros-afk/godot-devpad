@@ -3,6 +3,7 @@ import { useApp } from '../state/app'
 import { useToast } from './Toast'
 import { findProfile } from '../lib/profiles'
 import { CheckpointsModal } from './CheckpointsModal'
+import { AssetStudio } from './AssetStudio'
 import {
   PlayIcon,
   StopIcon,
@@ -11,6 +12,7 @@ import {
   ChevronDownIcon,
   EditIcon,
   HistoryIcon,
+  ImageIcon,
 } from './Icons'
 
 interface ToolbarProps {
@@ -24,6 +26,7 @@ export function Toolbar({ onHome, onOpenSettings, onOpenProfiles }: ToolbarProps
   const { toast } = useToast()
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [assetsOpen, setAssetsOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
   const running = godotStatus.state === 'running' || godotStatus.state === 'starting'
@@ -176,6 +179,15 @@ export function Toolbar({ onHome, onOpenSettings, onOpenProfiles }: ToolbarProps
         )}
       </div>
 
+      {/* Asset Studio */}
+      <button
+        onClick={() => setAssetsOpen(true)}
+        title="Asset Studio (generate sprites & art)"
+        className="grid h-8 w-8 place-items-center rounded-md border border-panel-600 bg-panel-700 text-slate-300 hover:bg-panel-600"
+      >
+        <ImageIcon width={16} height={16} />
+      </button>
+
       {/* Checkpoints / history */}
       <button
         onClick={() => setHistoryOpen(true)}
@@ -195,6 +207,9 @@ export function Toolbar({ onHome, onOpenSettings, onOpenProfiles }: ToolbarProps
       </button>
 
       {historyOpen && <CheckpointsModal onClose={() => setHistoryOpen(false)} />}
+      {assetsOpen && (
+        <AssetStudio onClose={() => setAssetsOpen(false)} onOpenSettings={onOpenSettings} />
+      )}
     </div>
   )
 }

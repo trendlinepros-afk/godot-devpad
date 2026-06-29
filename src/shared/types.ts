@@ -223,6 +223,35 @@ export interface GitState {
   repo: boolean
 }
 
+// ── Asset generation ─────────────────────────────────────────────────────────
+
+export type AssetKind = 'sprite' | 'tileset' | 'background' | 'icon' | 'concept'
+
+export interface GenerateAssetRequest {
+  prompt: string
+  kind: AssetKind
+  /** "1024x1024" | "1024x1536" | "1536x1024". */
+  size: string
+}
+
+export interface GenerateAssetResult {
+  ok: boolean
+  /** Base64 PNG (no data: prefix). */
+  base64?: string
+  error?: string
+  /** True when the failure is a missing OpenAI key (point user to Settings). */
+  needsSettings?: boolean
+}
+
+export interface SaveAssetResult {
+  ok: boolean
+  /** res:// path the asset was saved to. */
+  resPath?: string
+  /** Absolute path on disk. */
+  path?: string
+  error?: string
+}
+
 // ── Godot editor bridge (addon) ──────────────────────────────────────────────
 
 export interface BridgeStatus {
@@ -358,6 +387,12 @@ export interface DevPadBridge {
   mcp: {
     getStatus(): Promise<McpStatus>
     setEnabled(enabled: boolean): Promise<McpStatus>
+  }
+  assets: {
+    /** Generate an image asset from a text prompt (OpenAI image model). */
+    generate(req: GenerateAssetRequest): Promise<GenerateAssetResult>
+    /** Save a generated base64 PNG into the project's assets folder. */
+    save(base64: string, name: string): Promise<SaveAssetResult>
   }
   bridge: {
     getStatus(): Promise<BridgeStatus>

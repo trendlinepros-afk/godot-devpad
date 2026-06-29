@@ -28,6 +28,7 @@ import {
   bridgeRequest,
 } from './bridge-server'
 import { installAddon } from './godot-addon'
+import { generateAsset, saveAsset } from './assets'
 import {
   listDir,
   readFileText,
@@ -270,6 +271,10 @@ function registerIpc(): void {
     })
     return result.canceled ? null : (result.filePaths[0] ?? null)
   })
+
+  // Asset generation
+  ipcMain.handle('assets:generate', (_e, req) => generateAsset(req))
+  ipcMain.handle('assets:save', (_e, base64: string, name: string) => saveAsset(base64, name))
 
   // Godot editor bridge (addon)
   ipcMain.handle('bridge:status', () => getBridgeStatus())
