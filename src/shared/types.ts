@@ -194,6 +194,35 @@ export interface UpdateStatus {
   error?: string
 }
 
+// ── Agentic edits + checkpoints ──────────────────────────────────────────────
+
+export interface FileEdit {
+  /** res:// path (or project-relative) the AI wants to write. */
+  path: string
+  /** The COMPLETE new contents of the file. */
+  contents: string
+}
+
+export interface ApplyEditResult {
+  ok: boolean
+  /** Absolute path written, on success. */
+  path?: string
+  /** Hash of the safety checkpoint taken before the write, if any. */
+  checkpoint?: string
+  error?: string
+}
+
+export interface GitCheckpoint {
+  hash: string
+  message: string
+  /** Unix ms. */
+  ts: number
+}
+
+export interface GitState {
+  repo: boolean
+}
+
 // ── MCP server ───────────────────────────────────────────────────────────────
 
 export interface McpStatus {
@@ -223,6 +252,8 @@ export interface DevPadConfig {
   activeProfileId: string
   profiles: ModelProfile[]
   notes: Note[]
+  /** Take a git checkpoint before the AI writes files (undo safety net). */
+  checkpointsEnabled: boolean
   mcpEnabled: boolean
   monitorPosition: MonitorPosition
   windowBounds?: { width: number; height: number; x?: number; y?: number }
@@ -276,6 +307,14 @@ export interface DevPadBridge {
     list(dir: string): Promise<FileNode | null>
     read(path: string): Promise<{ ok: boolean; contents?: string; error?: string }>
     openExternal(path: string): Promise<void>
+    /** Apply an AI-proposed edit (writes the file, checkpointing first). */
+    applyEdit(edit: FileEdit): Promise<ApplyEditResult>
+  }
+  git: {
+    state(): Promise<GitState>
+    checkpoint(message: string): Promise<{ ok: boolean; hash?: string; error?: string }>
+    list(): Promise<GitCheckpoint[]>
+    restore(hash: string): Promise<{ ok: boolean; error?: string }>
   }
   capture: {
     captureGodot(): Promise<{ ok: boolean; screenshot?: string; source?: string; error?: string }>

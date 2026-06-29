@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useApp } from '../state/app'
 import { useToast } from './Toast'
 import { findProfile } from '../lib/profiles'
+import { CheckpointsModal } from './CheckpointsModal'
 import {
   PlayIcon,
   StopIcon,
@@ -9,6 +10,7 @@ import {
   GearIcon,
   ChevronDownIcon,
   EditIcon,
+  HistoryIcon,
 } from './Icons'
 
 interface ToolbarProps {
@@ -21,6 +23,7 @@ export function Toolbar({ onHome, onOpenSettings, onOpenProfiles }: ToolbarProps
   const { config, godotStatus, update, setGodotStatus } = useApp()
   const { toast } = useToast()
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
   const running = godotStatus.state === 'running' || godotStatus.state === 'starting'
@@ -173,6 +176,15 @@ export function Toolbar({ onHome, onOpenSettings, onOpenProfiles }: ToolbarProps
         )}
       </div>
 
+      {/* Checkpoints / history */}
+      <button
+        onClick={() => setHistoryOpen(true)}
+        title="Checkpoints (undo AI edits)"
+        className="grid h-8 w-8 place-items-center rounded-md border border-panel-600 bg-panel-700 text-slate-300 hover:bg-panel-600"
+      >
+        <HistoryIcon width={16} height={16} />
+      </button>
+
       {/* Settings */}
       <button
         onClick={onOpenSettings}
@@ -181,6 +193,8 @@ export function Toolbar({ onHome, onOpenSettings, onOpenProfiles }: ToolbarProps
       >
         <GearIcon width={16} height={16} />
       </button>
+
+      {historyOpen && <CheckpointsModal onClose={() => setHistoryOpen(false)} />}
     </div>
   )
 }

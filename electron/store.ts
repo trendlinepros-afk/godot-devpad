@@ -20,6 +20,7 @@ const defaults: DevPadConfig = {
   activeProfileId: DEFAULT_PROFILE_ID,
   profiles: DEFAULT_PROFILES,
   notes: [],
+  checkpointsEnabled: true,
   mcpEnabled: false,
   monitorPosition: 'auto',
   windowBounds: { width: 1200, height: 800 },

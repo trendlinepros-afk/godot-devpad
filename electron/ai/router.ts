@@ -56,6 +56,30 @@ function systemPrompt(): string {
   return `${versionPrompt}${notesContext()}`
 }
 
+// Instructs the model how to propose direct file edits that Zirtola renders as
+// reviewable diffs the developer can apply with one click. Appended to the
+// system prompt for code-capable tasks (chat / file_analysis / vision_to_code).
+const EDIT_PROTOCOL_PROMPT = `
+
+--- EDITING THE PROJECT ---
+You can directly edit the developer's Godot project. When you want to CREATE or MODIFY a file, output a fenced block in EXACTLY this format:
+
+\`\`\`zirtola-edit path="res://relative/path/file.gd"
+<the COMPLETE new contents of the file>
+\`\`\`
+
+Rules:
+- Put the ENTIRE file contents inside the block — never a partial snippet or a diff.
+- Use the res:// path relative to the project root (e.g. res://scripts/player.gd). Create new files the same way.
+- You may include multiple edit blocks in one reply; add a short explanation before each.
+- Only use a zirtola-edit block when you actually want to change a file on disk. For illustrative code the developer should NOT apply, use a normal \`\`\`gdscript block instead.
+- The developer reviews a diff and approves each change before it is written, so prefer complete, working files.`
+
+/** System prompt for code-capable tasks: base prompt + the edit protocol. */
+function codeSystemPrompt(): string {
+  return `${systemPrompt()}${EDIT_PROTOCOL_PROMPT}`
+}
+
 function keys(): ProviderKeys {
   return getConfig().apiKeys
 }
@@ -86,6 +110,7 @@ function missingKeyResponse(err: MissingKeyError): AiResponse {
 export async function route(req: AiRequest): Promise<AiResponse> {
   const profile = activeProfile()
   const sys = systemPrompt()
+  const codeSys = codeSystemPrompt()
   const k = keys()
 
   try {
@@ -114,7 +139,7 @@ export async function route(req: AiRequest): Promise<AiResponse> {
       const answer = await callProvider(
         {
           modelId: v2cModel,
-          systemPrompt: sys,
+          systemPrompt: codeSys,
           text: [
             'A screenshot of the Godot project was analysed. Here is the description:',
             '',
@@ -142,7 +167,7 @@ export async function route(req: AiRequest): Promise<AiResponse> {
     if (req.fileAnalysis) {
       const model = profile.tasks.file_analysis
       const text = await callProvider(
-        { modelId: model, systemPrompt: sys, text: req.text, history: req.history },
+        { modelId: model, systemPrompt: codeSys, text: req.text, history: req.history },
         k,
         MCP_PORT,
       )
@@ -152,7 +177,7 @@ export async function route(req: AiRequest): Promise<AiResponse> {
     // ── Text-only chat ────────────────────────────────────────────────────────
     const model = profile.tasks.chat
     const text = await callProvider(
-      { modelId: model, systemPrompt: sys, text: req.text, history: req.history },
+      { modelId: model, systemPrompt: codeSys, text: req.text, history: req.history },
       k,
       MCP_PORT,
     )

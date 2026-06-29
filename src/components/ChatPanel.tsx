@@ -6,6 +6,8 @@ import { useApp } from '../state/app'
 import { useToast } from './Toast'
 import { chatBus } from '../state/chatBus'
 import { findProfile } from '../lib/profiles'
+import { parseSegments } from '../lib/edits'
+import { EditCard } from './EditCard'
 import { PaperclipIcon, SendIcon, XIcon, TrashIcon } from './Icons'
 
 interface ChatMessage {
@@ -240,10 +242,12 @@ function MessageBubble({
   onOpenSettings: () => void
 }) {
   const isUser = message.role === 'user'
+  const segments = !isUser && !message.error ? parseSegments(message.content) : null
+  const containsEdit = segments?.some((s) => s.type === 'edit') ?? false
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div
-        className={`max-w-[85%] rounded-2xl px-4 py-2.5 ${
+        className={`rounded-2xl px-4 py-2.5 ${containsEdit ? 'w-full max-w-full' : 'max-w-[85%]'} ${
           isUser
             ? 'bg-accent text-white'
             : message.error
@@ -262,7 +266,17 @@ function MessageBubble({
           <div className="markdown-body whitespace-pre-wrap text-sm">{message.content}</div>
         ) : (
           <div>
-            <Markdown>{message.content}</Markdown>
+            {segments ? (
+              segments.map((seg, i) =>
+                seg.type === 'edit' ? (
+                  <EditCard key={i} path={seg.path} contents={seg.contents} />
+                ) : (
+                  <Markdown key={i}>{seg.value}</Markdown>
+                ),
+              )
+            ) : (
+              <Markdown>{message.content}</Markdown>
+            )}
             {message.needsSettings && (
               <button
                 onClick={onOpenSettings}

@@ -294,10 +294,26 @@ function GodotSection() {
           ))}
         </select>
       </Field>
-      <p className="text-xs leading-relaxed text-slate-500">
+      <p className="mb-4 text-xs leading-relaxed text-slate-500">
         The selected version's system prompt is prepended to every AI request, keeping suggestions
         on the right GDScript dialect.
       </p>
+
+      <label className="flex cursor-pointer items-start gap-2.5 rounded-md border border-panel-600 bg-panel-800 px-3 py-2.5">
+        <input
+          type="checkbox"
+          checked={config.checkpointsEnabled}
+          onChange={(e) => update({ checkpointsEnabled: e.target.checked })}
+          className="mt-0.5 accent-accent"
+        />
+        <span>
+          <span className="block text-sm text-slate-200">Checkpoint before AI edits</span>
+          <span className="block text-xs text-slate-500">
+            Take a git snapshot before the AI writes files so you can undo from the Checkpoints
+            (↺ history) menu. Recommended.
+          </span>
+        </span>
+      </label>
     </div>
   )
 }

@@ -3,6 +3,7 @@ import type {
   AiRequest,
   DevPadBridge,
   DevPadConfig,
+  FileEdit,
   GodotStatus,
   GodotLogEntry,
   GodotDownloadProgress,
@@ -59,6 +60,13 @@ const bridge: DevPadBridge = {
     list: (dir: string) => ipcRenderer.invoke('files:list', dir),
     read: (p: string) => ipcRenderer.invoke('files:read', p),
     openExternal: (p: string) => ipcRenderer.invoke('files:openExternal', p),
+    applyEdit: (edit: FileEdit) => ipcRenderer.invoke('files:applyEdit', edit),
+  },
+  git: {
+    state: () => ipcRenderer.invoke('git:state'),
+    checkpoint: (message: string) => ipcRenderer.invoke('git:checkpoint', message),
+    list: () => ipcRenderer.invoke('git:list'),
+    restore: (hash: string) => ipcRenderer.invoke('git:restore', hash),
   },
   capture: {
     captureGodot: () => ipcRenderer.invoke('capture:godot'),

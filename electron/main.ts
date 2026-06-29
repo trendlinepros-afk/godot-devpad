@@ -27,7 +27,10 @@ import {
   openExternal,
   createNewProject,
   validateProject,
+  applyEdit,
+  toReadablePath,
 } from './files'
+import { isRepo, checkpoint, listCheckpoints, restoreCheckpoint } from './git'
 import { captureGodotWindow } from './capture'
 import {
   initUpdater,
@@ -232,8 +235,15 @@ function registerIpc(): void {
 
   // Files
   ipcMain.handle('files:list', (_e, dir: string) => listDir(dir))
-  ipcMain.handle('files:read', (_e, p: string) => readFileText(p))
+  ipcMain.handle('files:read', (_e, p: string) => readFileText(toReadablePath(p)))
   ipcMain.handle('files:openExternal', (_e, p: string) => openExternal(p))
+  ipcMain.handle('files:applyEdit', (_e, edit) => applyEdit(edit))
+
+  // Git checkpoints (undo safety net for AI edits)
+  ipcMain.handle('git:state', async () => ({ repo: await isRepo() }))
+  ipcMain.handle('git:checkpoint', (_e, message: string) => checkpoint(message))
+  ipcMain.handle('git:list', () => listCheckpoints())
+  ipcMain.handle('git:restore', (_e, hash: string) => restoreCheckpoint(hash))
 
   // Capture
   ipcMain.handle('capture:godot', () => captureGodotWindow())

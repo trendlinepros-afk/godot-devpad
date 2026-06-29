@@ -52,6 +52,22 @@ never coded), the launcher shows a **"Set up Godot"** assistant that:
 It's also available anytime from **Settings → Godot**, with a manual file picker
 and an "open the download page" fallback.
 
+## Agentic edits + checkpoints
+
+Zirtola can write your game, not just talk about it. For code tasks the AI is told
+it can propose file changes as fenced `zirtola-edit path="res://…"` blocks
+(`EDIT_PROTOCOL_PROMPT` in `electron/ai/router.ts`). The chat renders each block
+as an **EditCard**: a colour-coded diff against the current file (or "NEW FILE"),
+with **Apply** / **Reject**. Apply writes the file (confined to the project
+folder via `resolveProjectPath`).
+
+Before any write, Zirtola takes a **git checkpoint** (`electron/git.ts`). These
+are stored on a dedicated ref (`refs/zirtola/checkpoints`) using a temporary
+index, so the user's own branch, HEAD and staging area are never touched. The
+toolbar's **↺ history** button lists checkpoints and restores any of them (the
+restore itself checkpoints first, so it's undoable). Toggle the safety net in
+**Settings → Godot → Checkpoint before AI edits**.
+
 ## The error → fix loop
 
 Zirtola captures Godot's stdout/stderr (it no longer discards it) into a bottom

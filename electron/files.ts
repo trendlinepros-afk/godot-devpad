@@ -1,7 +1,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { shell } from 'electron'
-import type { FileNode } from '@shared/types'
+import type { FileNode, FileEdit, ApplyEditResult } from '@shared/types'
+import { getConfig } from './store'
+import { checkpoint } from './git'
 
 // File browser backend (main process). The tree is read lazily: list(dir)
 // returns the directory's immediate children, and each child directory is
@@ -83,6 +85,50 @@ export function readFileText(filePath: string): ReadResult {
 /** Open a file in the OS default editor/application. */
 export async function openExternal(filePath: string): Promise<void> {
   await shell.openPath(filePath)
+}
+
+/**
+ * Resolve a res:// or project-relative path to an absolute path INSIDE the
+ * project folder. Returns null if the result escapes the project (guards both
+ * reads and writes against path traversal).
+ */
+export function resolveProjectPath(p: string): string | null {
+  const dir = getConfig().projectDir
+  if (!dir) return null
+  let rel = p.trim()
+  if (rel.startsWith('res://')) rel = rel.slice('res://'.length)
+  const abs = path.resolve(path.isAbsolute(rel) ? rel : path.join(dir, rel))
+  const root = path.resolve(dir)
+  if (abs !== root && !abs.startsWith(root + path.sep)) return null
+  return abs
+}
+
+/** For reads: resolve res:// within the project, else use the path as given. */
+export function toReadablePath(p: string): string {
+  if (p.startsWith('res://') || !path.isAbsolute(p)) return resolveProjectPath(p) ?? p
+  return p
+}
+
+/**
+ * Apply an AI-proposed file edit: take a safety checkpoint (if enabled), then
+ * write the full file contents. Confined to the project folder.
+ */
+export async function applyEdit(edit: FileEdit): Promise<ApplyEditResult> {
+  const abs = resolveProjectPath(edit.path)
+  if (!abs) return { ok: false, error: 'That path is outside the project folder.' }
+  try {
+    let checkpointHash: string | undefined
+    if (getConfig().checkpointsEnabled) {
+      const rel = path.relative(getConfig().projectDir, abs)
+      const cp = await checkpoint(`Before edit: ${rel}`)
+      if (cp.ok) checkpointHash = cp.hash
+    }
+    fs.mkdirSync(path.dirname(abs), { recursive: true })
+    fs.writeFileSync(abs, edit.contents, 'utf-8')
+    return { ok: true, path: abs, checkpoint: checkpointHash }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
 }
 
 /** Does the folder already contain a project.godot? */
