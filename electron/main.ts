@@ -24,6 +24,7 @@ import {
 } from './godot'
 import {
   isSupported as embedSupported,
+  support as embedSupport,
   findWindowByPid,
   embed as embedWindow,
   moveEmbedded,
@@ -123,8 +124,10 @@ let embedInProgress = false
 let lastEmbedRect: EmbedRect | null = null
 
 function sendEmbedStatus(message?: string): void {
+  const s = embedSupport()
   mainWindow?.webContents.send('embed:status', {
-    supported: embedSupported(),
+    supported: s.supported,
+    reason: s.reason,
     active: embedActive,
     message,
   })
@@ -387,7 +390,10 @@ function registerIpc(): void {
     else attemptEmbed()
   })
   ipcMain.handle('embed:clear', () => clearEmbed())
-  ipcMain.handle('embed:status', () => ({ supported: embedSupported(), active: embedActive }))
+  ipcMain.handle('embed:status', () => {
+    const s = embedSupport()
+    return { supported: s.supported, reason: s.reason, active: embedActive }
+  })
 
   // Window / multi-monitor
   ipcMain.handle('window:getDisplays', () => getDisplayInfos())

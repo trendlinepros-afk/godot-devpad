@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AppProvider, useApp } from './state/app'
 import { TourProvider, useTour } from './state/tour'
 import { ToastProvider, useToast } from './components/Toast'
@@ -90,7 +90,8 @@ function Shell({
   onOpenSettings: () => void
   onOpenProfiles: () => void
 }) {
-  const { config } = useApp()
+  const { config, godotStatus } = useApp()
+  const { toast } = useToast()
   const tour = useTour()
   const [leftTab, setLeftTab] = useState<LeftTab>('files')
   const [mainView, setMainView] = useState<MainView>('chat')
@@ -104,6 +105,32 @@ function Shell({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // In embedded mode, jump to the Game tab when the game starts so the embed
+  // targets the visible pane (and the user sees its status) instead of getting
+  // a separate window over Chat.
+  const prevGodot = useRef(godotStatus.state)
+  useEffect(() => {
+    if (
+      config?.godotWindowMode === 'embedded' &&
+      godotStatus.state !== 'stopped' &&
+      prevGodot.current === 'stopped'
+    ) {
+      setMainView('game')
+    }
+    prevGodot.current = godotStatus.state
+  }, [godotStatus.state, config?.godotWindowMode])
+
+  // Surface embed outcomes as toasts so the user gets feedback on any tab.
+  useEffect(() => {
+    return window.devpad.embed.onStatus((s) => {
+      if (config?.godotWindowMode !== 'embedded') return
+      if (s.active) toast('Godot embedded into the Game tab', 'success')
+      else if (s.message) toast(s.message, 'info')
+      else if (!s.supported && s.reason) toast(s.reason, 'info')
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config?.godotWindowMode])
 
   const openNote = (id: string) => {
     setActiveNoteId(id)

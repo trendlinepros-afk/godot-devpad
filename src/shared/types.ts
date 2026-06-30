@@ -353,6 +353,8 @@ export interface EmbedRect {
 export interface EmbedStatus {
   /** True on Windows where reparenting is possible. */
   supported: boolean
+  /** Why embedding is unavailable, when supported === false. */
+  reason?: string
   /** True when a Godot window is currently embedded. */
   active: boolean
   message?: string

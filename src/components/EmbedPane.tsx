@@ -78,8 +78,11 @@ export function EmbedPane({ active, onOpenSettings }: Props) {
   } else if (!status.supported) {
     message = (
       <Message
-        title="Embedding is Windows-only"
-        body="On this OS Godot runs in its own window. Everything else works the same."
+        title="Embedding isn't available"
+        body={
+          status.reason ??
+          'On this system Godot runs in its own window. Everything else works the same.'
+        }
       />
     )
   } else if (!running) {

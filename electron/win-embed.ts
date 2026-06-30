@@ -42,11 +42,15 @@ interface Win32 {
 
 let win32: Win32 | null = null
 let loadAttempted = false
+let loadError: string | null = null
 
 function load(): Win32 | null {
   if (loadAttempted) return win32
   loadAttempted = true
-  if (process.platform !== 'win32') return null
+  if (process.platform !== 'win32') {
+    loadError = 'Embedding is only available on Windows.'
+    return null
+  }
   try {
     const koffi = require('koffi')
     const user32 = koffi.load('user32.dll')
@@ -64,6 +68,7 @@ function load(): Win32 | null {
       koffi,
     }
   } catch (err) {
+    loadError = `Native module failed to load: ${err instanceof Error ? err.message : String(err)}`
     console.warn('[embed] koffi/user32 unavailable, embedding disabled:', err)
     win32 = null
   }
@@ -72,6 +77,12 @@ function load(): Win32 | null {
 
 export function isSupported(): boolean {
   return load() !== null
+}
+
+/** Why embedding is/ isn't available — surfaced to the UI for diagnosis. */
+export function support(): { supported: boolean; reason?: string } {
+  const ok = load() !== null
+  return { supported: ok, reason: ok ? undefined : (loadError ?? 'Embedding unavailable.') }
 }
 
 /** Parent HWND (BigInt) read from Electron's getNativeWindowHandle() buffer. */
@@ -87,8 +98,9 @@ export function findWindowByPid(pid: number): Handle | null {
   try {
     const proto = w.koffi.proto('bool __stdcall WndEnum(uintptr_t, intptr_t)')
     const cb = w.koffi.register((hwnd: Handle) => {
-      const pidOut = [0]
-      w.GetWindowThreadProcessId(hwnd, pidOut)
+      // Typed array for the koffi out-param (a plain [] can silently stay 0).
+      const pidOut = new Uint32Array(1)
+      w.GetWindowThreadProcessId(hwnd, pidOut as unknown as number[])
       if (pidOut[0] === pid && w.IsWindowVisible(hwnd)) {
         found = hwnd
         return false // stop enumeration
