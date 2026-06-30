@@ -9,6 +9,10 @@ import path from 'node:path'
 // provider SDKs — the renderer reaches them exclusively through the preload
 // contextBridge (see electron/preload.ts).
 export default defineConfig({
+  // Relative asset paths so the renderer loads correctly over file:// in the
+  // packaged app (absolute "/assets/…" paths resolve to the drive root under
+  // file:// and 404, leaving a blank window).
+  base: './',
   resolve: {
     alias: {
       '@shared': path.resolve(__dirname, 'src/shared'),
