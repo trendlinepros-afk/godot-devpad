@@ -52,6 +52,9 @@
   "build": {
     "appId": "com.zirtola.app",
     "productName": "Zirtola",
+    "directories": {
+      "buildResources": "build"
+    },
     "files": [
       "dist",
       "dist-electron",
