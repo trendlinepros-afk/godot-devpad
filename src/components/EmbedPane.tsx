@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { EmbedStatus } from '@shared/types'
 import { useApp } from '../state/app'
+import { overlay } from '../state/overlay'
 import { PlayIcon } from './Icons'
 
 // Host pane for the experimental Windows "embedded Godot" mode. When embedded
@@ -21,29 +22,33 @@ export function EmbedPane({ active, onOpenSettings }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const mode = config?.godotWindowMode ?? 'separate'
   const [status, setStatus] = useState<EmbedStatus>({ supported: false, active: false })
+  const [overlayOpen, setOverlayOpen] = useState(overlay.get() > 0)
 
   useEffect(() => {
     window.devpad.embed.getStatus().then(setStatus)
     return window.devpad.embed.onStatus(setStatus)
   }, [])
 
+  // Hide the native window whenever a modal/drawer/tour is open (it would
+  // otherwise paint on top of them).
+  useEffect(() => overlay.subscribe((n) => setOverlayOpen(n > 0)), [])
+
   const report = useCallback(() => {
     if (mode !== 'embedded') return
     const dpr = window.devicePixelRatio || 1
-    if (!active) {
+    const el = ref.current
+    if (!active || overlayOpen || !el) {
       window.devpad.embed.setBounds({ ...OFFSCREEN, dpr })
       return
     }
-    const el = ref.current
-    if (!el) return
     const r = el.getBoundingClientRect()
     window.devpad.embed.setBounds({ x: r.left, y: r.top, width: r.width, height: r.height, dpr })
-  }, [active, mode])
+  }, [active, mode, overlayOpen])
 
-  // Report bounds when active/mode changes, and keep them in sync on resize.
+  // Report bounds when active/mode/overlay changes, and keep in sync on resize.
   useEffect(() => {
     report()
-    if (!active || mode !== 'embedded') return
+    if (!active || mode !== 'embedded' || overlayOpen) return
     const ro = new ResizeObserver(report)
     if (ref.current) ro.observe(ref.current)
     window.addEventListener('resize', report)
@@ -51,7 +56,7 @@ export function EmbedPane({ active, onOpenSettings }: Props) {
       ro.disconnect()
       window.removeEventListener('resize', report)
     }
-  }, [active, mode, report])
+  }, [active, mode, overlayOpen, report])
 
   // Leaving embedded mode detaches Godot back to its own window.
   useEffect(() => {
@@ -61,9 +66,9 @@ export function EmbedPane({ active, onOpenSettings }: Props) {
   const running = godotStatus.state === 'running' || godotStatus.state === 'starting'
 
   // Overlay messaging (shown behind / around the native window).
-  let overlay: React.ReactNode = null
+  let message: React.ReactNode = null
   if (mode !== 'embedded') {
-    overlay = (
+    message = (
       <Message
         title="Embedded mode is off"
         body="Godot currently opens in its own window. Turn on embedded mode to dock it here."
@@ -71,14 +76,14 @@ export function EmbedPane({ active, onOpenSettings }: Props) {
       />
     )
   } else if (!status.supported) {
-    overlay = (
+    message = (
       <Message
         title="Embedding is Windows-only"
         body="On this OS Godot runs in its own window. Everything else works the same."
       />
     )
   } else if (!running) {
-    overlay = (
+    message = (
       <Message
         title="Run your game to dock it here"
         body="Press Run (F5). The Godot window will be embedded into this panel."
@@ -86,7 +91,7 @@ export function EmbedPane({ active, onOpenSettings }: Props) {
       />
     )
   } else if (!status.active) {
-    overlay = (
+    message = (
       <Message
         title="Connecting to the Godot window…"
         body={status.message ?? 'Looking for the running game window to embed.'}
@@ -98,7 +103,7 @@ export function EmbedPane({ active, onOpenSettings }: Props) {
     <div className="relative h-full w-full bg-black">
       {/* The native Godot window is positioned over this element by the main process. */}
       <div ref={ref} className="absolute inset-0" />
-      {overlay && <div className="pointer-events-auto absolute inset-0">{overlay}</div>}
+      {message && <div className="pointer-events-auto absolute inset-0">{message}</div>}
     </div>
   )
 }

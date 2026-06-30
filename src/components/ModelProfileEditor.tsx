@@ -11,6 +11,7 @@ import {
   validateProfile,
 } from '../lib/profiles'
 import { StarIcon, TrashIcon, CopyIcon, PlusIcon, XIcon, CheckIcon } from './Icons'
+import { overlay } from '../state/overlay'
 
 const TASK_META: { key: TaskKind; label: string; hint: string }[] = [
   { key: 'chat', label: 'Chat', hint: 'Text conversations' },
@@ -267,6 +268,11 @@ export function Modal({
   onClose: () => void
   children: React.ReactNode
 }) {
+  // Mark an overlay as open so the embedded Godot window hides behind it.
+  useEffect(() => {
+    overlay.open()
+    return () => overlay.close()
+  }, [])
   return (
     <div
       className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-6"

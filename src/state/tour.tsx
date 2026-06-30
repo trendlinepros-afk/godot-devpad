@@ -9,6 +9,7 @@ import {
 } from 'react'
 import { TOUR_STEPS, type TourStep } from '../lib/tourSteps'
 import { useApp } from './app'
+import { overlay } from './overlay'
 
 interface TourContextValue {
   start: () => void
@@ -75,6 +76,13 @@ export function TourProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('scroll', measure, true)
     }
   }, [active, step, index])
+
+  // While the tour is active it's a full-screen overlay — hide the embed.
+  useEffect(() => {
+    if (!active) return
+    overlay.open()
+    return () => overlay.close()
+  }, [active])
 
   // Allow Esc to dismiss, arrow keys to navigate.
   useEffect(() => {

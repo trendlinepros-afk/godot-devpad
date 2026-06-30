@@ -119,6 +119,7 @@ function persistBounds(win: BrowserWindow): void {
 
 let embeddedHwnd: number | bigint | null = null
 let embedActive = false
+let embedInProgress = false
 let lastEmbedRect: EmbedRect | null = null
 
 function sendEmbedStatus(message?: string): void {
@@ -137,26 +138,33 @@ async function attemptEmbed(): Promise<void> {
     !embedSupported() ||
     !mainWindow ||
     !lastEmbedRect ||
-    embedActive
+    embedActive ||
+    embedInProgress // single-flight: setBounds fires often; don't stack poll loops
   ) {
     return
   }
   const pid = getGodotPid()
   if (!pid) return
-  // The game window appears shortly after launch — poll for it.
-  for (let i = 0; i < 24; i++) {
-    if (getGodotPid() !== pid) return // stopped/changed while polling
-    const hwnd = findWindowByPid(pid)
-    if (hwnd != null && lastEmbedRect && mainWindow) {
-      const ok = embedWindow(mainWindow.getNativeWindowHandle(), hwnd, lastEmbedRect)
-      embeddedHwnd = ok ? hwnd : null
-      embedActive = ok
-      sendEmbedStatus(ok ? undefined : 'Could not embed the Godot window.')
-      return
+  embedInProgress = true
+  try {
+    // The game window appears shortly after launch — poll for it.
+    for (let i = 0; i < 24; i++) {
+      if (getGodotPid() !== pid) return // stopped/changed while polling
+      if (getConfig().godotWindowMode !== 'embedded') return // mode changed
+      const hwnd = findWindowByPid(pid)
+      if (hwnd != null && lastEmbedRect && mainWindow) {
+        const ok = embedWindow(mainWindow.getNativeWindowHandle(), hwnd, lastEmbedRect)
+        embeddedHwnd = ok ? hwnd : null
+        embedActive = ok
+        sendEmbedStatus(ok ? undefined : 'Could not embed the Godot window.')
+        return
+      }
+      await new Promise((r) => setTimeout(r, 250))
     }
-    await new Promise((r) => setTimeout(r, 250))
+    sendEmbedStatus('Timed out finding the Godot window to embed.')
+  } finally {
+    embedInProgress = false
   }
-  sendEmbedStatus('Timed out finding the Godot window to embed.')
 }
 
 function clearEmbed(): void {

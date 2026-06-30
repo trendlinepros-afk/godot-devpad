@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useApp } from '../state/app'
 import { useToast } from './Toast'
 import { useTour } from '../state/tour'
+import { overlay } from '../state/overlay'
 import { findProfile } from '../lib/profiles'
 import { modelLabel } from '../lib/models'
 import { CheckpointsModal } from './CheckpointsModal'
@@ -38,6 +39,15 @@ export function Toolbar({ onHome, onOpenSettings, onOpenProfiles }: ToolbarProps
   const helpRef = useRef<HTMLDivElement>(null)
 
   const running = godotStatus.state === 'running' || godotStatus.state === 'starting'
+
+  // Toolbar dropdowns open over the main area — hide the embedded game while
+  // one is open so it doesn't paint over the menu.
+  useEffect(() => {
+    if (profileMenuOpen || helpMenuOpen) {
+      overlay.open()
+      return () => overlay.close()
+    }
+  }, [profileMenuOpen, helpMenuOpen])
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {

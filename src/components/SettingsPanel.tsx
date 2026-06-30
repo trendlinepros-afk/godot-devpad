@@ -7,6 +7,7 @@ import { XIcon, StarIcon, EditIcon, PlusIcon } from './Icons'
 import { UpdateControls } from './UpdateControls'
 import { GodotSetup } from './GodotSetup'
 import { Modal } from './ModelProfileEditor'
+import { overlay } from '../state/overlay'
 
 type Section = 'ai' | 'godot' | 'mcp' | 'window' | 'versions' | 'updates'
 
@@ -26,6 +27,12 @@ interface Props {
 
 export function SettingsPanel({ onClose, onOpenProfiles }: Props) {
   const [section, setSection] = useState<Section>('ai')
+
+  // Hide the embedded Godot window while this drawer is open.
+  useEffect(() => {
+    overlay.open()
+    return () => overlay.close()
+  }, [])
 
   return (
     <div className="fixed inset-0 z-30 flex justify-end bg-black/50" onMouseDown={onClose}>
