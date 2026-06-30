@@ -1,7 +1,7 @@
 import { app, shell } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
-import { Readable } from 'node:stream'
+import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import AdmZip from 'adm-zip'
 import type { DetectedGodot, GodotDownloadProgress } from '@shared/types'
@@ -191,24 +191,47 @@ export async function downloadGodot(
 
     emit({ phase: 'downloading', percent: 0, message: `Downloading ${asset.name}…` })
     const res = await fetch(asset.browser_download_url, {
-      headers: { 'User-Agent': 'DevPad' },
+      headers: { 'User-Agent': 'Zirtola', Accept: 'application/octet-stream' },
     })
     if (!res.ok || !res.body) throw new Error(`Download failed (status ${res.status}).`)
 
     const total = Number(res.headers.get('content-length') ?? 0)
     let received = 0
-    const nodeStream = Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0])
-    nodeStream.on('data', (chunk: Buffer) => {
-      received += chunk.length
-      if (total > 0) {
-        emit({
-          phase: 'downloading',
-          percent: Math.round((received / total) * 100),
-          message: `Downloading ${asset.name}…`,
-        })
-      }
+    let lastPct = -1
+    // Count bytes INSIDE the pipeline. Using a separate stream.on('data')
+    // listener flips the source into flowing mode and can drop the first chunks
+    // before the file writer is attached, producing a truncated/corrupt zip
+    // ("invalid block type" on extraction).
+    const counter = new Transform({
+      transform(chunk, _enc, cb) {
+        received += chunk.length
+        if (total > 0) {
+          const pct = Math.round((received / total) * 100)
+          if (pct !== lastPct) {
+            lastPct = pct
+            emit({ phase: 'downloading', percent: pct, message: `Downloading ${asset.name}…` })
+          }
+        }
+        cb(null, chunk)
+      },
     })
-    await pipeline(nodeStream, fs.createWriteStream(zipPath))
+    const nodeStream = Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0])
+    await pipeline(nodeStream, counter, fs.createWriteStream(zipPath))
+
+    // Validate the download before extracting: non-empty, full length, and a
+    // real zip (PK signature). Surfaces a clear error instead of a zlib crash.
+    const stat = fs.statSync(zipPath)
+    if (stat.size === 0) throw new Error('The download was empty.')
+    if (total > 0 && stat.size !== total) {
+      throw new Error(`Download incomplete (${stat.size} of ${total} bytes).`)
+    }
+    const fd = fs.openSync(zipPath, 'r')
+    const sig = Buffer.alloc(2)
+    fs.readSync(fd, sig, 0, 2, 0)
+    fs.closeSync(fd)
+    if (sig.toString('latin1') !== 'PK') {
+      throw new Error('Downloaded file is not a valid Zip archive.')
+    }
 
     emit({ phase: 'extracting', percent: 100, message: 'Extracting Godot…' })
     const extractDir = path.join(dest, asset.name.replace(/\.zip$/i, ''))
