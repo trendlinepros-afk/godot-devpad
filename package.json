@@ -1,6 +1,6 @@
 {
   "name": "zirtola",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Zirtola — The AI Video Game Editor. A local-first Godot game development companion with an integrated AI assistant.",
   "author": "Zirtola",
   "license": "MIT",
@@ -65,7 +65,8 @@
       {
         "provider": "github",
         "owner": "trendlinepros-afk",
-        "repo": "godot-devpad"
+        "repo": "godot-devpad",
+        "releaseType": "release"
       }
     ],
     "win": {
