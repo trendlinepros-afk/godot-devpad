@@ -205,6 +205,9 @@ function createWindow(): void {
 
   if (VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(VITE_DEV_SERVER_URL)
+    // Open the dev console automatically so embed/IPC diagnostics ([embed] …)
+    // are visible immediately when running `npm run dev` for local debugging.
+    mainWindow.webContents.openDevTools({ mode: 'detach' })
   } else {
     mainWindow.loadFile(path.join(RENDERER_DIST, 'index.html'))
   }
