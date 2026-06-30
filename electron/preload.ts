@@ -11,6 +11,8 @@ import type {
   BridgeEvent,
   GenerateAssetRequest,
   MonitorPosition,
+  EmbedRect,
+  EmbedStatus,
   ProviderId,
   UpdateStatus,
 } from '@shared/types'
@@ -124,6 +126,16 @@ const bridge: DevPadBridge = {
   window: {
     getDisplays: () => ipcRenderer.invoke('window:getDisplays'),
     setMonitor: (position: MonitorPosition) => ipcRenderer.invoke('window:setMonitor', position),
+  },
+  embed: {
+    setBounds: (rect: EmbedRect) => ipcRenderer.invoke('embed:setBounds', rect),
+    clear: () => ipcRenderer.invoke('embed:clear'),
+    getStatus: () => ipcRenderer.invoke('embed:status'),
+    onStatus: (cb) => {
+      const listener = (_e: unknown, s: EmbedStatus) => cb(s)
+      ipcRenderer.on('embed:status', listener)
+      return () => ipcRenderer.removeListener('embed:status', listener)
+    },
   },
   events: {
     onHotkey: (cb) => {

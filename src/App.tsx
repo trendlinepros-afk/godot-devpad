@@ -8,6 +8,7 @@ import { NotesList } from './components/NotesList'
 import { NoteEditor } from './components/NoteEditor'
 import { EnginePanel } from './components/EnginePanel'
 import { ChatPanel } from './components/ChatPanel'
+import { EmbedPane } from './components/EmbedPane'
 import { GodotConsole } from './components/GodotConsole'
 import { SettingsPanel } from './components/SettingsPanel'
 import { ModelProfileEditor } from './components/ModelProfileEditor'
@@ -15,7 +16,7 @@ import { SetupWizard } from './components/SetupWizard'
 import { Launcher } from './components/Launcher'
 
 type LeftTab = 'files' | 'notes' | 'engine'
-type MainView = 'chat' | 'note'
+type MainView = 'chat' | 'note' | 'game'
 type View = 'launcher' | 'app'
 
 function Root() {
@@ -143,6 +144,7 @@ function Shell({
             tabs={[
               { key: 'chat', label: 'Chat' },
               { key: 'note', label: 'Note' },
+              { key: 'game', label: 'Game' },
             ]}
             active={mainView}
             onChange={(k) => {
@@ -157,6 +159,10 @@ function Shell({
             </div>
             <div className={`h-full ${mainView === 'note' ? '' : 'hidden'}`}>
               <NoteEditor noteId={activeNoteId} onSelect={setActiveNoteId} />
+            </div>
+            {/* Game pane stays mounted so it can report bounds for the embed. */}
+            <div className={`h-full ${mainView === 'game' ? '' : 'hidden'}`}>
+              <EmbedPane active={mainView === 'game'} onOpenSettings={onOpenSettings} />
             </div>
           </div>
         </main>

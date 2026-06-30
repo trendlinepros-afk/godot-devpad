@@ -88,6 +88,11 @@ export function getStatus(): GodotStatus {
   }
 }
 
+/** PID of the running Godot process, or null. Used by the Windows embedder. */
+export function getPid(): number | null {
+  return child?.pid ?? null
+}
+
 function emit(message?: string): void {
   onChange?.({ ...getStatus(), message })
 }

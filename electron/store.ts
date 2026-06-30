@@ -24,6 +24,7 @@ const defaults: DevPadConfig = {
   notes: [],
   checkpointsEnabled: true,
   mcpEnabled: false,
+  godotWindowMode: 'separate',
   monitorPosition: 'auto',
   windowBounds: { width: 1200, height: 800 },
 }

@@ -47,6 +47,7 @@ export default defineConfig({
                 'openai',
                 'adm-zip',
                 'ws',
+                'koffi',
                 '@google/generative-ai',
               ],
             },

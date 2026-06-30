@@ -1,6 +1,6 @@
 {
   "name": "zirtola",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Zirtola — The AI Video Game Editor. A local-first Godot game development companion with an integrated AI assistant.",
   "author": "Zirtola",
   "license": "MIT",
@@ -20,6 +20,7 @@
     "@google/generative-ai": "^0.21.0",
     "adm-zip": "^0.5.16",
     "electron-store": "^8.2.0",
+    "koffi": "^2.9.0",
     "electron-updater": "^6.3.9",
     "express": "^4.21.2",
     "openai": "^4.77.0",
@@ -59,6 +60,9 @@
       "dist",
       "dist-electron",
       "godot-versions.json"
+    ],
+    "asarUnpack": [
+      "**/node_modules/koffi/**"
     ],
     "extraResources": [
       "godot-versions.json",

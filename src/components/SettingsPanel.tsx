@@ -432,6 +432,22 @@ function WindowSection() {
   return (
     <div>
       <SectionTitle>Window</SectionTitle>
+      <Field label="Godot Game Window">
+        <select
+          value={config.godotWindowMode}
+          onChange={(e) => update({ godotWindowMode: e.target.value as 'separate' | 'embedded' })}
+          className={inputClass}
+        >
+          <option value="separate">Separate window (recommended)</option>
+          <option value="embedded">Embedded in Zirtola (experimental, Windows)</option>
+        </select>
+      </Field>
+      <p className="mb-4 text-xs leading-relaxed text-slate-500">
+        <strong>Separate</strong> runs Godot in its own window (works everywhere) — pair it with the
+        monitor setting below to put it on a second screen. <strong>Embedded</strong> docks the
+        running game inside Zirtola's <em>Game</em> tab; it's experimental and Windows-only (other
+        platforms fall back to a separate window).
+      </p>
       <Field label="Monitor Position">
         <select
           value={String(config.monitorPosition)}

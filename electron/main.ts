@@ -5,6 +5,7 @@ import type {
   AiRequest,
   DevPadConfig,
   DisplayInfo,
+  EmbedRect,
   MonitorPosition,
   ProviderId,
 } from '@shared/types'
@@ -18,8 +19,16 @@ import {
   onLogEntry as onGodotLog,
   getLogs as getGodotLogs,
   clearLogs as clearGodotLogs,
+  getPid as getGodotPid,
   GodotLaunchError,
 } from './godot'
+import {
+  isSupported as embedSupported,
+  findWindowByPid,
+  embed as embedWindow,
+  moveEmbedded,
+  detach as detachWindow,
+} from './win-embed'
 import { detectGodot, downloadGodot, openDownloadPage } from './godot-install'
 import {
   startBridgeServer,
@@ -106,6 +115,57 @@ function persistBounds(win: BrowserWindow): void {
   store.set('windowBounds', { width: b.width, height: b.height, x: b.x, y: b.y })
 }
 
+// ── Windows embed controller (experimental) ──────────────────────────────────
+
+let embeddedHwnd: number | bigint | null = null
+let embedActive = false
+let lastEmbedRect: EmbedRect | null = null
+
+function sendEmbedStatus(message?: string): void {
+  mainWindow?.webContents.send('embed:status', {
+    supported: embedSupported(),
+    active: embedActive,
+    message,
+  })
+}
+
+/** Find the Godot game window and reparent it into the embed pane. */
+async function attemptEmbed(): Promise<void> {
+  if (
+    process.platform !== 'win32' ||
+    getConfig().godotWindowMode !== 'embedded' ||
+    !embedSupported() ||
+    !mainWindow ||
+    !lastEmbedRect ||
+    embedActive
+  ) {
+    return
+  }
+  const pid = getGodotPid()
+  if (!pid) return
+  // The game window appears shortly after launch — poll for it.
+  for (let i = 0; i < 24; i++) {
+    if (getGodotPid() !== pid) return // stopped/changed while polling
+    const hwnd = findWindowByPid(pid)
+    if (hwnd != null && lastEmbedRect && mainWindow) {
+      const ok = embedWindow(mainWindow.getNativeWindowHandle(), hwnd, lastEmbedRect)
+      embeddedHwnd = ok ? hwnd : null
+      embedActive = ok
+      sendEmbedStatus(ok ? undefined : 'Could not embed the Godot window.')
+      return
+    }
+    await new Promise((r) => setTimeout(r, 250))
+  }
+  sendEmbedStatus('Timed out finding the Godot window to embed.')
+}
+
+function clearEmbed(): void {
+  if (embeddedHwnd != null) detachWindow(embeddedHwnd)
+  embeddedHwnd = null
+  embedActive = false
+  sendEmbedStatus()
+}
+
 // ── Window creation ──────────────────────────────────────────────────────────
 
 function createWindow(): void {
@@ -138,9 +198,14 @@ function createWindow(): void {
     mainWindow.loadFile(path.join(RENDERER_DIST, 'index.html'))
   }
 
-  // Forward Godot process state transitions to the renderer.
+  // Forward Godot process state transitions to the renderer, and drive the
+  // experimental Windows embed on run/stop.
   onGodotStatusChange((status) => {
     mainWindow?.webContents.send('godot:statusChange', status)
+    if (status.state === 'stopped') clearEmbed()
+    else if (status.state === 'running' && getConfig().godotWindowMode === 'embedded') {
+      attemptEmbed()
+    }
   })
 
   // Stream captured Godot stdout/stderr to the renderer console.
@@ -306,6 +371,15 @@ function registerIpc(): void {
     const outcome = await checkForUpdates()
     return { updated: outcome.added.length > 0, added: outcome.added, file: outcome.file }
   })
+
+  // Embedded Godot window (experimental, Windows)
+  ipcMain.handle('embed:setBounds', (_e, rect: EmbedRect) => {
+    lastEmbedRect = rect
+    if (embedActive && embeddedHwnd != null) moveEmbedded(embeddedHwnd, rect)
+    else attemptEmbed()
+  })
+  ipcMain.handle('embed:clear', () => clearEmbed())
+  ipcMain.handle('embed:status', () => ({ supported: embedSupported(), active: embedActive }))
 
   // Window / multi-monitor
   ipcMain.handle('window:getDisplays', () => getDisplayInfos())

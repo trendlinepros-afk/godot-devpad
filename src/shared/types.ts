@@ -339,6 +339,24 @@ export interface ApiKeys {
 }
 
 export type MonitorPosition = 'auto' | 0 | 1 | 2 | 3
+export type GodotWindowMode = 'separate' | 'embedded'
+
+export interface EmbedRect {
+  x: number
+  y: number
+  width: number
+  height: number
+  /** devicePixelRatio so the main process can convert CSS px → physical px. */
+  dpr: number
+}
+
+export interface EmbedStatus {
+  /** True on Windows where reparenting is possible. */
+  supported: boolean
+  /** True when a Godot window is currently embedded. */
+  active: boolean
+  message?: string
+}
 
 export interface DevPadConfig {
   setupComplete: boolean
@@ -363,6 +381,12 @@ export interface DevPadConfig {
   /** Take a git checkpoint before the AI writes files (undo safety net). */
   checkpointsEnabled: boolean
   mcpEnabled: boolean
+  /**
+   * How the Godot game window is presented:
+   *  - 'separate'  = its own OS window (reliable, all platforms) [default]
+   *  - 'embedded'  = reparented into a pane inside Zirtola (Windows only, experimental)
+   */
+  godotWindowMode: GodotWindowMode
   monitorPosition: MonitorPosition
   windowBounds?: { width: number; height: number; x?: number; y?: number }
 }
@@ -473,6 +497,14 @@ export interface DevPadBridge {
   window: {
     getDisplays(): Promise<DisplayInfo[]>
     setMonitor(position: MonitorPosition): Promise<void>
+  }
+  embed: {
+    /** Report the pane rect (CSS px + dpr) where Godot should be embedded. */
+    setBounds(rect: EmbedRect): Promise<void>
+    /** Detach the embedded Godot window (back to a separate window). */
+    clear(): Promise<void>
+    getStatus(): Promise<EmbedStatus>
+    onStatus(cb: (s: EmbedStatus) => void): () => void
   }
   events: {
     /** Fired when a global hotkey (F5/F6/F7) is pressed. */
