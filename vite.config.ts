@@ -20,6 +20,16 @@ export default defineConfig({
   },
   plugins: [
     react(),
+    // Strip the `crossorigin` attribute Vite adds to the bundled <script>/<link>
+    // tags — over file:// in the packaged app a crossorigin module request has no
+    // CORS response and the script silently fails to execute (blank window).
+    {
+      name: 'zirtola-strip-crossorigin',
+      enforce: 'post',
+      transformIndexHtml(html: string) {
+        return html.replace(/\s+crossorigin\b/g, '')
+      },
+    },
     electron({
       main: {
         entry: 'electron/main.ts',

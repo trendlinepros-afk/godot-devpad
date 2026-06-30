@@ -3,17 +3,46 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!--
-      Content Security Policy: the renderer never makes outbound network calls
-      (all AI/provider traffic happens in the Electron main process), so we lock
-      down connect-src to the local MCP server only. Images allow data: URIs for
-      screenshot thumbnails.
-    -->
-    <meta
-      http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' http://localhost:3727 http://127.0.0.1:3727; font-src 'self' data:;"
-    />
     <title>Zirtola — The AI Video Game Editor</title>
+    <!--
+      On-screen startup error reporter: if the renderer bundle throws before
+      React mounts, show the error in the window instead of a blank screen.
+      (No CSP meta here — a strict file:// CSP can block the bundled scripts;
+      the renderer makes no remote requests, and contextIsolation +
+      nodeIntegration:false provide the isolation.)
+    -->
+    <script>
+      function __zirtolaShowError(title, detail) {
+        var r = document.getElementById('root')
+        if (!r) return
+        r.innerHTML =
+          '<div style="padding:24px;font:13px ui-monospace,Menlo,Consolas,monospace;color:#fca5a5;background:#0e1116;height:100%;overflow:auto">' +
+          '<div style="color:#f87171;font-weight:700;margin-bottom:8px">Zirtola failed to start: ' +
+          title +
+          '</div><pre style="white-space:pre-wrap">' +
+          (detail || '') +
+          '</pre></div>'
+      }
+      // Capture phase so failed <script>/<link> loads are reported too.
+      window.addEventListener(
+        'error',
+        function (e) {
+          if (e.target && (e.target.src || e.target.href)) {
+            __zirtolaShowError('failed to load resource', e.target.src || e.target.href)
+          } else {
+            __zirtolaShowError(
+              e.message || 'script error',
+              (e.error && e.error.stack) || (e.filename ? e.filename + ':' + e.lineno : ''),
+            )
+          }
+        },
+        true,
+      )
+      window.addEventListener('unhandledrejection', function (e) {
+        var reason = e.reason || {}
+        __zirtolaShowError('unhandled rejection', reason.stack || reason.message || String(reason))
+      })
+    </script>
   </head>
   <body>
     <div id="root"></div>
