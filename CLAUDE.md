@@ -6,18 +6,21 @@ release automatically — do not wait to be asked.**
 
 Procedure each time:
 1. Bump `"version"` in `package.json` (patch by default; minor for notable
-   features).
-2. Commit the version bump with the other changes.
-3. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`.
-4. The `.github/workflows/release.yml` workflow builds the Windows (NSIS) and
-   macOS (dmg) installers and publishes them to GitHub Releases, which the
-   in-app "Check for Updates" pulls from.
-5. After tagging, verify the workflow run started (and report failures).
+   features). MUST be unique — electron-builder publishes a release tagged
+   `v{version}`, so reusing a version collides.
+2. Commit the version bump with the other changes on the working branch.
+3. Push the working branch, then push it to `main`:
+   `git push origin HEAD:main`.
+4. The push to `main` triggers `.github/workflows/release.yml`, which builds the
+   Windows (NSIS) and macOS (dmg) installers and publishes them to GitHub
+   Releases — the in-app "Check for Updates" pulls from there.
+5. Verify the workflow run started (GitHub Actions MCP) and report failures.
 
 Notes:
-- Tags trigger the release workflow from whatever branch they point at, as long
-  as `release.yml` exists in that commit — merging to the default branch is NOT
-  required to cut a release.
+- We release on **push to `main`**, NOT by pushing tags — this sandbox's git
+  proxy rejects tag pushes, so tag-based releases don't work from here.
+- `release.yml` still also accepts `v*` tags and manual dispatch for releases
+  cut from a normal environment.
 - Never embed a GitHub token in the app. If the source repo goes private later,
   publish installers to a separate PUBLIC releases repo (see docs) using a CI
   secret; nothing secret ships in the app.
