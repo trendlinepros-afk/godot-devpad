@@ -3,9 +3,15 @@ import { getConfig } from '../store'
 import { findVersionById } from '../versions'
 import { findProfile, DEFAULT_PROFILE_ID } from '../../src/lib/profiles'
 import { modelLabel } from '../../src/lib/models'
-import { callProvider, MissingKeyError, ProviderKeys } from './providers'
+import {
+  callProvider,
+  callProviderAgentic,
+  MissingKeyError,
+  ProviderKeys,
+  type ToolExecutor,
+} from './providers'
 import { getBridgeStatus } from '../bridge-server'
-import { projectFileMap } from '../files'
+import { projectFileMap, resolveProjectPath, readFileText, listDir } from '../files'
 
 export const MCP_PORT = 3727
 
@@ -72,14 +78,13 @@ function projectContext(): string {
 const WORKFLOW_GUIDANCE = `
 
 --- HOW TO WORK ---
-You already have the project's file list above. Do NOT ask the developer for
-permission to read, list, or open files, and do NOT ask them to paste files one
-at a time. Work proactively:
-- If you need the contents of specific files, ask ONCE for just those few files
-  (the developer can right-click a file → "Send to AI"), then continue.
-- Don't ask permission before each step; outline what you'll do briefly and do it.
-- When editing, propose the change directly (the developer approves edits in the
-  UI, so you don't need to ask "may I edit this?").`
+You can READ the project yourself with tools — never ask the developer to paste
+files or for permission to look at them:
+- Use the read_file tool to open any file (paths are in PROJECT FILES above), and
+  list_files to browse a directory. Read what you need, then answer.
+- Don't ask permission before each step; briefly say what you're doing and do it.
+- When changing a file, output the edit directly as a zirtola-edit block — the
+  developer approves edits in the UI, so never ask "may I edit this?".`
 
 function systemPrompt(): string {
   const cfg = getConfig()
@@ -156,6 +161,26 @@ function keys(): ProviderKeys {
   return getConfig().apiKeys
 }
 
+// Read-only file tools the AI can call, confined to the project directory.
+const execTool: ToolExecutor = async (name, args) => {
+  if (name === 'read_file') {
+    const abs = resolveProjectPath(String(args.path ?? ''))
+    if (!abs) return 'Error: path is outside the project.'
+    const r = readFileText(abs)
+    return r.ok ? (r.contents ?? '') : `Error: ${r.error}`
+  }
+  if (name === 'list_files') {
+    const dir = args.dir ? resolveProjectPath(String(args.dir)) : getConfig().projectDir
+    if (!dir) return 'Error: invalid directory.'
+    const node = listDir(dir)
+    if (!node) return 'Error: directory not found.'
+    return (node.children ?? [])
+      .map((c) => (c.isDir ? `${c.name}/` : c.name))
+      .join('\n')
+  }
+  return `Error: unknown tool "${name}".`
+}
+
 function missingKeyResponse(err: MissingKeyError): AiResponse {
   const names: Record<string, string> = {
     deepseek: 'DeepSeek',
@@ -208,7 +233,7 @@ export async function route(req: AiRequest): Promise<AiResponse> {
       )
 
       // Step 2 — answer using the description + the original message.
-      const answer = await callProvider(
+      const answer = await callProviderAgentic(
         {
           modelId: v2cModel,
           systemPrompt: codeSys,
@@ -225,6 +250,7 @@ export async function route(req: AiRequest): Promise<AiResponse> {
         },
         k,
         MCP_PORT,
+        execTool,
       )
 
       return {
@@ -238,20 +264,22 @@ export async function route(req: AiRequest): Promise<AiResponse> {
     // ── File analysis ────────────────────────────────────────────────────────
     if (req.fileAnalysis) {
       const model = profile.tasks.file_analysis
-      const text = await callProvider(
+      const text = await callProviderAgentic(
         { modelId: model, systemPrompt: codeSys, text: req.text, history: req.history },
         k,
         MCP_PORT,
+        execTool,
       )
       return { ok: true, text, modelId: model, modelLabel: modelLabel(model) }
     }
 
-    // ── Text-only chat ────────────────────────────────────────────────────────
+    // ── Text-only chat (AI can read project files via tools) ────────────────────
     const model = profile.tasks.chat
-    const text = await callProvider(
+    const text = await callProviderAgentic(
       { modelId: model, systemPrompt: codeSys, text: req.text, history: req.history },
       k,
       MCP_PORT,
+      execTool,
     )
     return { ok: true, text, modelId: model, modelLabel: modelLabel(model) }
   } catch (err) {

@@ -158,6 +158,179 @@ export async function callProvider(
   }
 }
 
+// ── Agentic tool-calling (the AI reads project files itself) ─────────────────
+//
+// Tools are READ-ONLY (read_file / list_files), confined to the project by the
+// executor in router.ts. Edits still happen via the zirtola-edit / zirtola-scene
+// block protocol so the user's Ask/Auto mode governs writes. If a model/provider
+// errors on tools, we fall back to a plain (toolless) completion.
+
+export type ToolExecutor = (name: string, args: Record<string, unknown>) => Promise<string>
+
+const MAX_TOOL_ITERS = 8
+const TOOL_RESULT_CAP = 40000
+
+function cap(s: string): string {
+  return s.length > TOOL_RESULT_CAP ? s.slice(0, TOOL_RESULT_CAP) + '\n…(truncated)' : s
+}
+
+const OPENAI_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
+  {
+    type: 'function',
+    function: {
+      name: 'read_file',
+      description:
+        'Read the UTF-8 contents of a file in the Godot project. Use a res:// or project-relative path (see the PROJECT FILES list).',
+      parameters: {
+        type: 'object',
+        properties: { path: { type: 'string', description: 'e.g. res://scripts/player.gd' } },
+        required: ['path'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'list_files',
+      description: 'List the files and folders in a project directory.',
+      parameters: {
+        type: 'object',
+        properties: { dir: { type: 'string', description: 'res:// or project-relative dir' } },
+      },
+    },
+  },
+]
+
+async function callOpenAiCompatibleAgentic(
+  call: ProviderCall,
+  apiKey: string,
+  exec: ToolExecutor,
+  baseURL?: string,
+): Promise<string> {
+  const client = new OpenAI({ apiKey, baseURL })
+  const messages: OpenAI.Chat.ChatCompletionMessageParam[] = []
+  if (call.systemPrompt) messages.push({ role: 'system', content: call.systemPrompt })
+  for (const h of call.history ?? []) messages.push({ role: h.role, content: h.content })
+  messages.push({ role: 'user', content: call.text })
+
+  for (let i = 0; i < MAX_TOOL_ITERS; i++) {
+    const completion = await client.chat.completions.create({
+      model: apiModelName(call.modelId),
+      messages,
+      tools: OPENAI_TOOLS,
+      temperature: 0.3,
+    })
+    const msg = completion.choices[0]?.message
+    if (!msg) return ''
+    if (msg.tool_calls && msg.tool_calls.length > 0) {
+      messages.push(msg)
+      for (const tc of msg.tool_calls) {
+        let args: Record<string, unknown> = {}
+        try {
+          args = JSON.parse(tc.function.arguments || '{}')
+        } catch {
+          /* ignore malformed args */
+        }
+        const result = await exec(tc.function.name, args)
+        messages.push({ role: 'tool', tool_call_id: tc.id, content: cap(result) })
+      }
+      continue
+    }
+    return msg.content ?? ''
+  }
+  // Hit the iteration cap — ask for a final answer with no more tools.
+  const final = await client.chat.completions.create({
+    model: apiModelName(call.modelId),
+    messages: [...messages, { role: 'user', content: 'Now give your final answer.' }],
+    temperature: 0.3,
+  })
+  return final.choices[0]?.message?.content ?? ''
+}
+
+async function callGeminiAgentic(
+  call: ProviderCall,
+  apiKey: string,
+  exec: ToolExecutor,
+): Promise<string> {
+  const genai = new GoogleGenerativeAI(apiKey)
+  const model = genai.getGenerativeModel({
+    model: apiModelName(call.modelId),
+    systemInstruction: call.systemPrompt || undefined,
+    tools: [
+      {
+        functionDeclarations: [
+          {
+            name: 'read_file',
+            description: 'Read the UTF-8 contents of a project file (res:// or relative path).',
+            // @ts-expect-error the SDK accepts string schema types at runtime
+            parameters: { type: 'OBJECT', properties: { path: { type: 'STRING' } }, required: ['path'] },
+          },
+          {
+            name: 'list_files',
+            description: 'List files/folders in a project directory.',
+            // @ts-expect-error the SDK accepts string schema types at runtime
+            parameters: { type: 'OBJECT', properties: { dir: { type: 'STRING' } } },
+          },
+        ],
+      },
+    ],
+  })
+
+  const history = (call.history ?? []).map((h) => ({
+    role: h.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: h.content }],
+  }))
+  const chat = model.startChat({ history })
+  let result = await chat.sendMessage(call.text || '')
+
+  for (let i = 0; i < MAX_TOOL_ITERS; i++) {
+    const calls = result.response.functionCalls?.() ?? []
+    if (!calls || calls.length === 0) return result.response.text()
+    const responses = []
+    for (const fc of calls) {
+      const out = await exec(fc.name, (fc.args as Record<string, unknown>) ?? {})
+      responses.push({ functionResponse: { name: fc.name, response: { result: cap(out) } } })
+    }
+    result = await chat.sendMessage(responses)
+  }
+  return result.response.text()
+}
+
+/**
+ * Provider call WITH read-only file tools. Used for text tasks so the AI can
+ * pull file contents on its own. Falls back to a plain call on any error.
+ */
+export async function callProviderAgentic(
+  call: ProviderCall,
+  keys: ProviderKeys,
+  mcpPort: number,
+  exec: ToolExecutor,
+): Promise<string> {
+  const provider = providerFor(call.modelId)
+  try {
+    switch (provider) {
+      case 'deepseek':
+        if (!keys.deepseek) throw new MissingKeyError('deepseek')
+        return await callOpenAiCompatibleAgentic(call, keys.deepseek, exec, 'https://api.deepseek.com')
+      case 'openai':
+        if (!keys.openai) throw new MissingKeyError('openai')
+        return await callOpenAiCompatibleAgentic(call, keys.openai, exec)
+      case 'gemini':
+        if (!keys.gemini) throw new MissingKeyError('gemini')
+        return await callGeminiAgentic(call, keys.gemini, exec)
+      case 'mcp':
+        return await callMcp(call, mcpPort)
+      default:
+        throw new Error(`Unknown provider for model ${call.modelId}`)
+    }
+  } catch (err) {
+    if (err instanceof MissingKeyError) throw err
+    // Tool calling may be unsupported or transiently fail — fall back to plain.
+    console.warn('[ai] agentic call failed, falling back to plain completion:', err)
+    return callProvider(call, keys, mcpPort)
+  }
+}
+
 /**
  * Generate an image from a text prompt via OpenAI's image model. Returns a
  * base64 PNG. `transparent` requests a transparent background (sprites/icons).
