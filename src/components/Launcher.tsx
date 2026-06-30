@@ -131,7 +131,7 @@ export function Launcher({ onEnter, onOpenSettings }: Props) {
               <div>
                 <div className="font-medium text-slate-100">Start New Project</div>
                 <div className="text-xs text-slate-500">
-                  Pick a folder — DevPad scaffolds a Godot project if needed.
+                  Pick a folder — Zirtola scaffolds a Godot project if needed.
                 </div>
               </div>
             </button>

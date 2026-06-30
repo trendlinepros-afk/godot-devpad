@@ -62,14 +62,22 @@ export function NoteEditor({ noteId, onSelect }: Props) {
     [note, persist],
   )
 
-  // Flush any pending save when unmounting or switching notes.
-  useEffect(() => {
-    return () => {
-      if (saveTimer.current) {
-        clearTimeout(saveTimer.current)
-        if (latest.current && !saved) persist(latest.current)
-      }
+  // Flush any pending (debounced) save immediately. Kept in a ref so the
+  // unmount/switch cleanup always calls the latest version — otherwise it would
+  // close over a stale `saved`/`persist` and silently drop the last edit.
+  const flush = () => {
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current)
+      saveTimer.current = null
+      if (latest.current) persist(latest.current)
     }
+  }
+  const flushRef = useRef(flush)
+  flushRef.current = flush
+
+  // Flush the pending save when unmounting or switching notes.
+  useEffect(() => {
+    return () => flushRef.current()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [noteId])
 

@@ -59,17 +59,12 @@ export function Toolbar({ onHome, onOpenSettings, onOpenProfiles }: ToolbarProps
     return off
   }, [toast, setGodotStatus])
 
-  const run = async () => {
-    const status = await window.devpad.godot.run()
-    setGodotStatus(status)
-    if (status.state === 'stopped' && status.message) toast(status.message, 'error')
-  }
+  // Error messages are surfaced centrally by the godotStatus.message effect
+  // above (covers button clicks, hotkeys, and async spawn/exit failures), so we
+  // don't toast here to avoid duplicates.
+  const run = async () => setGodotStatus(await window.devpad.godot.run())
   const stop = async () => setGodotStatus(await window.devpad.godot.stop())
-  const restart = async () => {
-    const status = await window.devpad.godot.restart()
-    setGodotStatus(status)
-    if (status.state === 'stopped' && status.message) toast(status.message, 'error')
-  }
+  const restart = async () => setGodotStatus(await window.devpad.godot.restart())
 
   const activeProfile = config ? findProfile(config.profiles, config.activeProfileId) : undefined
 
