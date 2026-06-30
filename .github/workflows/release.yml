@@ -24,6 +24,9 @@ jobs:
   release:
     strategy:
       fail-fast: false
+      # Publish one platform at a time. Parallel jobs publishing to the same
+      # GitHub release race each other and drop assets (e.g. the Windows .exe).
+      max-parallel: 1
       matrix:
         include:
           - os: windows-latest
