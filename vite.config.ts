@@ -61,7 +61,17 @@ export default defineConfig({
         vite: {
           build: {
             outDir: 'dist-electron',
-            rollupOptions: { external: ['electron'] },
+            // Build the preload as CommonJS (.cjs). ESM preload (.mjs) fails to
+            // load in the packaged app, leaving window.devpad undefined; a CJS
+            // preload + contextBridge is the reliable, standard combination.
+            rollupOptions: {
+              external: ['electron'],
+              output: {
+                format: 'cjs',
+                entryFileNames: 'preload.cjs',
+                inlineDynamicImports: true,
+              },
+            },
           },
         },
       },
