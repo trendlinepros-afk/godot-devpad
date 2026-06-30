@@ -29,6 +29,8 @@ import {
   embed as embedWindow,
   moveEmbedded,
   detach as detachWindow,
+  attachInput,
+  detachInput,
 } from './win-embed'
 import { detectGodot, downloadGodot, openDownloadPage } from './godot-install'
 import {
@@ -133,7 +135,23 @@ function sendEmbedStatus(message?: string): void {
   })
 }
 
-/** Find the Godot game window and reparent it into the embed pane. */
+/**
+ * Convert the embed pane's rect (CSS px relative to the web content) into an
+ * absolute physical-pixel screen rect for positioning the overlay window.
+ * screen.dipToScreenRect handles per-monitor DPI scaling so we don't hand-roll it.
+ */
+function paneScreenRect(rect: EmbedRect): { x: number; y: number; width: number; height: number } {
+  const cb = mainWindow!.getContentBounds() // DIP screen coords of the web content
+  const dip = {
+    x: Math.round(cb.x + rect.x),
+    y: Math.round(cb.y + rect.y),
+    width: Math.max(1, Math.round(rect.width)),
+    height: Math.max(1, Math.round(rect.height)),
+  }
+  return screen.dipToScreenRect(mainWindow!, dip)
+}
+
+/** Find the Godot game window and dock it over the embed pane. */
 async function attemptEmbed(): Promise<void> {
   if (
     process.platform !== 'win32' ||
@@ -156,9 +174,10 @@ async function attemptEmbed(): Promise<void> {
       if (getConfig().godotWindowMode !== 'embedded') return // mode changed
       const hwnd = findWindowByPid(pid)
       if (hwnd != null && lastEmbedRect && mainWindow) {
-        const ok = embedWindow(mainWindow.getNativeWindowHandle(), hwnd, lastEmbedRect)
+        const ok = await embedWindow(mainWindow.getNativeWindowHandle(), hwnd, paneScreenRect(lastEmbedRect))
         embeddedHwnd = ok ? hwnd : null
         embedActive = ok
+        if (ok) void attachInput(hwnd, true) // focus + foreground the fresh game
         sendEmbedStatus(ok ? undefined : 'Could not embed the Godot window.')
         return
       }
@@ -171,7 +190,9 @@ async function attemptEmbed(): Promise<void> {
 }
 
 function clearEmbed(): void {
-  if (embeddedHwnd != null) detachWindow(embeddedHwnd)
+  // detachWindow/detachInput are async (run off the UI thread); fire-and-forget.
+  void detachInput()
+  if (embeddedHwnd != null) void detachWindow(embeddedHwnd)
   embeddedHwnd = null
   embedActive = false
   sendEmbedStatus()
@@ -231,6 +252,16 @@ function createWindow(): void {
   mainWindow.on('move', () => mainWindow && persistBounds(mainWindow))
   mainWindow.on('closed', () => {
     mainWindow = null
+  })
+
+  // When the user clicks back into Zirtola while a game is embedded and visible
+  // (Game tab), hand keyboard/mouse focus to the embedded game so it responds.
+  // Gated on an on-screen rect so we never steal focus while it's parked
+  // off-screen on another tab.
+  mainWindow.on('focus', () => {
+    if (embedActive && embeddedHwnd != null && lastEmbedRect && lastEmbedRect.x > -10000) {
+      void attachInput(embeddedHwnd)
+    }
   })
 }
 
@@ -389,8 +420,14 @@ function registerIpc(): void {
   // Embedded Godot window (experimental, Windows)
   ipcMain.handle('embed:setBounds', (_e, rect: EmbedRect) => {
     lastEmbedRect = rect
-    if (embedActive && embeddedHwnd != null) moveEmbedded(embeddedHwnd, rect)
-    else attemptEmbed()
+    // Both branches run off the UI thread; fire-and-forget (setBounds fires often).
+    if (embedActive && embeddedHwnd != null) {
+      void moveEmbedded(embeddedHwnd, paneScreenRect(rect))
+      // Keep input attached only while the game is actually visible (Game tab).
+      // Off-screen (other tab) we detach so it can't hold focus/mouse capture.
+      if (rect.x > -10000) void attachInput(embeddedHwnd)
+      else void detachInput()
+    } else void attemptEmbed()
   })
   ipcMain.handle('embed:clear', () => clearEmbed())
   ipcMain.handle('embed:status', () => {

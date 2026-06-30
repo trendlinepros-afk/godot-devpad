@@ -63,6 +63,14 @@ export function EmbedPane({ active, onOpenSettings }: Props) {
     if (mode !== 'embedded') window.devpad.embed.clear()
   }, [mode])
 
+  // The embed can complete while the pane is still reporting its initial
+  // off-screen rect (tab-switch vs. embed race). As soon as the main process
+  // confirms the window is embedded, push the pane's real bounds so the game
+  // is positioned over this panel instead of being stuck off-screen.
+  useEffect(() => {
+    if (status.active) report()
+  }, [status.active, report])
+
   const running = godotStatus.state === 'running' || godotStatus.state === 'starting'
 
   // Overlay messaging (shown behind / around the native window).
