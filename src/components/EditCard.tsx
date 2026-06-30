@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { diffLines, type DiffResult } from '../lib/diff'
 import { useToast } from './Toast'
 import { CheckIcon, XIcon, FileIcon, ChevronDownIcon, ChevronRightIcon } from './Icons'
@@ -6,13 +6,15 @@ import { CheckIcon, XIcon, FileIcon, ChevronDownIcon, ChevronRightIcon } from '.
 interface Props {
   path: string
   contents: string
+  /** When true (Auto mode), apply as soon as the diff is ready. */
+  autoApply?: boolean
 }
 
 type Status = 'loading' | 'pending' | 'applied' | 'rejected' | 'error'
 
 const COLLAPSED_ROWS = 14
 
-export function EditCard({ path, contents }: Props) {
+export function EditCard({ path, contents, autoApply = false }: Props) {
   const { toast } = useToast()
   const [status, setStatus] = useState<Status>('loading')
   const [isNew, setIsNew] = useState(false)
@@ -46,6 +48,16 @@ export function EditCard({ path, contents }: Props) {
       toast(res.error ?? 'Failed to apply edit', 'error')
     }
   }
+
+  // Auto mode: apply once as soon as the diff is ready.
+  const autoApplied = useRef(false)
+  useEffect(() => {
+    if (autoApply && status === 'pending' && !autoApplied.current) {
+      autoApplied.current = true
+      apply()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoApply, status])
 
   const fileName = path.replace(/^res:\/\//, '').split('/').pop() ?? path
 

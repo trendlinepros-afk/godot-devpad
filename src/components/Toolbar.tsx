@@ -145,6 +145,37 @@ export function Toolbar({ onHome, onOpenSettings, onOpenProfiles }: ToolbarProps
             : 'Stopped'}
       </div>
 
+      {/* Agent autonomy mode */}
+      <div
+        data-tour="chat-mode"
+        className="ml-2 flex overflow-hidden rounded-md border border-panel-600"
+      >
+        {(
+          [
+            ['chat', 'Chat', 'Read-only — answers & plans, never edits files'],
+            ['ask', 'Ask', 'Proposes edits you approve one by one'],
+            ['auto', 'Auto', 'Applies edits automatically (a checkpoint is saved first)'],
+          ] as const
+        ).map(([value, label, tip]) => (
+          <button
+            key={value}
+            onClick={() => update({ agentMode: value })}
+            title={tip}
+            className={`px-2.5 py-1 text-xs ${
+              config?.agentMode === value
+                ? value === 'auto'
+                  ? 'bg-amber-600 text-white'
+                  : value === 'chat'
+                    ? 'bg-panel-500 text-white'
+                    : 'bg-accent text-white'
+                : 'bg-panel-700 text-slate-300 hover:bg-panel-600'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* Current model indicator (which model the active profile uses for chat) */}
       {activeProfile && (
         <div

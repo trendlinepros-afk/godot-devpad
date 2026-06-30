@@ -5,6 +5,7 @@ import { findProfile, DEFAULT_PROFILE_ID } from '../../src/lib/profiles'
 import { modelLabel } from '../../src/lib/models'
 import { callProvider, MissingKeyError, ProviderKeys } from './providers'
 import { getBridgeStatus } from '../bridge-server'
+import { projectFileMap } from '../files'
 
 export const MCP_PORT = 3727
 
@@ -51,10 +52,39 @@ function notesContext(): string {
  * The active Godot version's aiSystemPrompt is prepended to every request, with
  * the developer's pinned project notes appended as shared context.
  */
+/** A compact listing of the project's files so the AI knows the layout. */
+function projectContext(): string {
+  const cfg = getConfig()
+  if (!cfg.projectDir) return ''
+  const files = projectFileMap(cfg.projectDir)
+  if (files.length === 0) return ''
+  return [
+    '',
+    '--- PROJECT FILES ---',
+    `The project is at ${cfg.projectDir}. These are its files (res:// paths):`,
+    '',
+    files.join('\n'),
+    '--- END PROJECT FILES ---',
+  ].join('\n')
+}
+
+// Keeps the assistant from peppering the user with permission questions.
+const WORKFLOW_GUIDANCE = `
+
+--- HOW TO WORK ---
+You already have the project's file list above. Do NOT ask the developer for
+permission to read, list, or open files, and do NOT ask them to paste files one
+at a time. Work proactively:
+- If you need the contents of specific files, ask ONCE for just those few files
+  (the developer can right-click a file → "Send to AI"), then continue.
+- Don't ask permission before each step; outline what you'll do briefly and do it.
+- When editing, propose the change directly (the developer approves edits in the
+  UI, so you don't need to ask "may I edit this?").`
+
 function systemPrompt(): string {
   const cfg = getConfig()
   const versionPrompt = findVersionById(cfg.activeVersionId)?.aiSystemPrompt ?? ''
-  return `${versionPrompt}${notesContext()}`
+  return `${versionPrompt}${notesContext()}${projectContext()}${WORKFLOW_GUIDANCE}`
 }
 
 // Plan mode: collaborate on a plan, never touch files.

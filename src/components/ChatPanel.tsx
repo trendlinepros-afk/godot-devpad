@@ -26,14 +26,16 @@ interface ChatPanelProps {
 }
 
 export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
-  const { config } = useApp()
+  const { config, update } = useApp()
   const { toast } = useToast()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [screenshot, setScreenshot] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [lastModel, setLastModel] = useState<string | null>(null)
-  const [mode, setMode] = useState<'plan' | 'build'>('build')
+  // Autonomy mode is global (toolbar): 'chat' read-only, 'ask' approve, 'auto' apply.
+  const agentMode = config?.agentMode ?? 'ask'
+  const autoApply = agentMode === 'auto'
   const counter = useRef(0)
   const feedRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -102,7 +104,12 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
       setScreenshot(null)
       setBusy(true)
 
-      const res = await routeMessage({ text, screenshot: attached, history, mode })
+      const res = await routeMessage({
+        text,
+        screenshot: attached,
+        history,
+        mode: agentMode === 'chat' ? 'plan' : 'build',
+      })
 
       setBusy(false)
       if (res.ok) {
@@ -124,24 +131,19 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
         ])
       }
     },
-    [input, screenshot, busy, messages, mode],
+    [input, screenshot, busy, messages, agentMode],
   )
 
   // Keep a ref to the latest send so the chatBus listener can submit.
   const sendRef = useRef(send)
   sendRef.current = send
 
-  // Approve the plan and switch to Build mode to execute it.
-  const approvePlan = () => {
-    setMode('build')
-    // Defer so `mode` is 'build' before the request is built.
-    setTimeout(
-      () =>
-        sendRef.current({
-          text: 'The plan looks good. Implement it now — make the file and scene edits.',
-        }),
-      0,
-    )
+  // Approve the plan: switch to Ask mode and tell the AI to implement it.
+  const approvePlan = async () => {
+    await update({ agentMode: 'ask' })
+    sendRef.current({
+      text: 'The plan looks good. Implement it now — make the file and scene edits.',
+    })
   }
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -164,29 +166,13 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
           <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
             AI Chat
           </span>
-          {/* Plan / Build mode */}
-          <div className="flex overflow-hidden rounded-md border border-panel-600" data-tour="chat-mode">
-            {(['plan', 'build'] as const).map((m) => (
-              <button
-                key={m}
-                onClick={() => setMode(m)}
-                title={
-                  m === 'plan'
-                    ? 'Plan mode: discuss and refine a plan, no edits'
-                    : 'Build mode: the AI can propose file & scene edits'
-                }
-                className={`px-2.5 py-0.5 text-xs capitalize ${
-                  mode === m
-                    ? m === 'plan'
-                      ? 'bg-amber-600 text-white'
-                      : 'bg-accent text-white'
-                    : 'bg-panel-700 text-slate-300 hover:bg-panel-600'
-                }`}
-              >
-                {m}
-              </button>
-            ))}
-          </div>
+          <span className="rounded-full border border-panel-600 bg-panel-800 px-2 py-0.5 text-[11px] text-slate-400">
+            {agentMode === 'chat'
+              ? 'Read-only'
+              : agentMode === 'auto'
+                ? 'Auto-applying edits'
+                : 'Asks before editing'}
+          </span>
         </div>
         <div className="flex items-center gap-2">
           {lastModel && (
@@ -217,7 +203,12 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
           </div>
         )}
         {messages.map((m) => (
-          <MessageBubble key={m.id} message={m} onOpenSettings={onOpenSettings} />
+          <MessageBubble
+            key={m.id}
+            message={m}
+            onOpenSettings={onOpenSettings}
+            autoApply={autoApply}
+          />
         ))}
         {busy && (
           <div className="flex items-center gap-2 text-sm text-slate-400">
@@ -233,10 +224,10 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
 
       {/* Composer */}
       <div className="shrink-0 border-t border-panel-600 bg-panel-850 p-3" data-tour="composer">
-        {mode === 'plan' && (
+        {agentMode === 'chat' && (
           <div className="mb-2 flex items-center gap-2 rounded-md border border-amber-600/40 bg-amber-950/20 px-3 py-1.5 text-xs text-amber-200">
             <span className="flex-1">
-              Plan mode — discuss the approach. The AI won't edit files until you build.
+              Read-only mode — the AI answers and plans but won't edit files.
             </span>
             <button
               onClick={approvePlan}
@@ -298,9 +289,11 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
 function MessageBubble({
   message,
   onOpenSettings,
+  autoApply,
 }: {
   message: ChatMessage
   onOpenSettings: () => void
+  autoApply: boolean
 }) {
   const isUser = message.role === 'user'
   const segments = !isUser && !message.error ? parseSegments(message.content) : null
@@ -330,9 +323,9 @@ function MessageBubble({
             {segments ? (
               segments.map((seg, i) =>
                 seg.type === 'edit' ? (
-                  <EditCard key={i} path={seg.path} contents={seg.contents} />
+                  <EditCard key={i} path={seg.path} contents={seg.contents} autoApply={autoApply} />
                 ) : seg.type === 'scene' ? (
-                  <SceneEditCard key={i} proposal={seg.proposal} />
+                  <SceneEditCard key={i} proposal={seg.proposal} autoApply={autoApply} />
                 ) : (
                   <Markdown key={i}>{seg.value}</Markdown>
                 ),

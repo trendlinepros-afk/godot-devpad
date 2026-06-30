@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { SceneEditProposal, SceneOp, ApplySceneOpsResult } from '@shared/types'
 import { useApp } from '../state/app'
 import { useToast } from './Toast'
@@ -10,6 +10,8 @@ import { CheckIcon, XIcon } from './Icons'
 
 interface Props {
   proposal: SceneEditProposal
+  /** When true (Auto mode) and the editor is connected, apply automatically. */
+  autoApply?: boolean
 }
 
 type Status = 'pending' | 'applied' | 'rejected' | 'error'
@@ -29,7 +31,7 @@ function describe(op: SceneOp): string {
   }
 }
 
-export function SceneEditCard({ proposal }: Props) {
+export function SceneEditCard({ proposal, autoApply = false }: Props) {
   const { bridgeStatus, config } = useApp()
   const { toast } = useToast()
   const [status, setStatus] = useState<Status>('pending')
@@ -63,6 +65,16 @@ export function SceneEditCard({ proposal }: Props) {
       toast(msg, 'error')
     }
   }
+
+  // Auto mode: apply once when connected (scene edits require the editor bridge).
+  const autoApplied = useRef(false)
+  useEffect(() => {
+    if (autoApply && connected && status === 'pending' && !autoApplied.current) {
+      autoApplied.current = true
+      apply()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoApply, connected, status])
 
   return (
     <div className="my-2 overflow-hidden rounded-lg border border-panel-600 bg-panel-900">

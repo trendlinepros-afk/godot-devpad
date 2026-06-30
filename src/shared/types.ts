@@ -67,6 +67,7 @@ export interface ChatMessageInput {
 }
 
 export type ChatMode = 'plan' | 'build'
+export type AgentMode = 'chat' | 'ask' | 'auto'
 
 export interface AiRequest {
   /** The user's text prompt. May be empty when only a screenshot is supplied. */
@@ -343,6 +344,13 @@ export interface DevPadConfig {
   setupComplete: boolean
   /** Whether the interactive product tour has been completed/dismissed. */
   tourComplete: boolean
+  /**
+   * AI autonomy:
+   *  - 'chat' = read-only, never proposes file/scene edits
+   *  - 'ask'  = proposes edits the user approves one by one (default)
+   *  - 'auto' = applies proposed edits automatically (still checkpointed)
+   */
+  agentMode: AgentMode
   apiKeys: ApiKeys
   godotExecutablePath: string
   projectDir: string

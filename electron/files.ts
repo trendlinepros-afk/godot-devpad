@@ -36,7 +36,7 @@ function listChildren(dir: string): FileNode[] {
     return []
   }
   const nodes = entries
-    .filter((e) => !IGNORED.has(e.name))
+    .filter((e) => !IGNORED.has(e.name) && !e.name.endsWith('.tmp'))
     .map((e) => toNode(path.join(dir, e.name), true))
 
   // Folders first, then files, both alphabetical (case-insensitive).
@@ -59,6 +59,43 @@ export function listDir(dir: string): FileNode | null {
   const node = toNode(dir, true)
   node.children = listChildren(dir)
   return node
+}
+
+/**
+ * A compact recursive listing of the project's files as res:// paths, capped so
+ * it stays cheap to include in the AI system prompt. Lets the AI understand the
+ * project layout without interrogating the user file-by-file.
+ */
+export function projectFileMap(projectDir: string, cap = 400): string[] {
+  if (!projectDir || !fs.existsSync(projectDir)) return []
+  const out: string[] = []
+  const walk = (dir: string) => {
+    if (out.length >= cap) return
+    let entries: fs.Dirent[]
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    // Folders first then files, alphabetical, for a stable readable map.
+    entries.sort((a, b) => {
+      if (a.isDirectory() !== b.isDirectory()) return a.isDirectory() ? -1 : 1
+      return a.name.localeCompare(b.name)
+    })
+    for (const e of entries) {
+      if (out.length >= cap) return
+      if (IGNORED.has(e.name) || e.name.endsWith('.tmp')) continue
+      const full = path.join(dir, e.name)
+      if (e.isDirectory()) {
+        walk(full)
+      } else {
+        const rel = path.relative(projectDir, full).split(path.sep).join('/')
+        out.push(`res://${rel}`)
+      }
+    }
+  }
+  walk(projectDir)
+  return out
 }
 
 export interface ReadResult {

@@ -13,6 +13,7 @@ import { DEFAULT_PROFILES, DEFAULT_PROFILE_ID } from '../src/lib/profiles'
 const defaults: DevPadConfig = {
   setupComplete: false,
   tourComplete: false,
+  agentMode: 'ask',
   apiKeys: { deepseek: '', gemini: '', openai: '' },
   godotExecutablePath: '',
   projectDir: '',

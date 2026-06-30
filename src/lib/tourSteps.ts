@@ -28,8 +28,8 @@ export const TOUR_STEPS: TourStep[] = [
   },
   {
     target: 'chat-mode',
-    title: 'Plan vs Build',
-    body: 'In Plan mode the AI helps you shape an idea without touching files. Switch to Build and it can actually write code and edit scenes — which you approve.',
+    title: 'Choose how much control the AI has',
+    body: '“Chat” is read-only (answers & plans, no edits). “Ask” proposes edits you approve one by one. “Auto” applies edits automatically — every change is still checkpointed so you can undo.',
     placement: 'bottom',
   },
   {
