@@ -165,7 +165,7 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
             AI Chat
           </span>
           {/* Plan / Build mode */}
-          <div className="flex overflow-hidden rounded-md border border-panel-600">
+          <div className="flex overflow-hidden rounded-md border border-panel-600" data-tour="chat-mode">
             {(['plan', 'build'] as const).map((m) => (
               <button
                 key={m}
@@ -232,7 +232,7 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
       </div>
 
       {/* Composer */}
-      <div className="shrink-0 border-t border-panel-600 bg-panel-850 p-3">
+      <div className="shrink-0 border-t border-panel-600 bg-panel-850 p-3" data-tour="composer">
         {mode === 'plan' && (
           <div className="mb-2 flex items-center gap-2 rounded-md border border-amber-600/40 bg-amber-950/20 px-3 py-1.5 text-xs text-amber-200">
             <span className="flex-1">

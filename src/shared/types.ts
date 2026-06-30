@@ -341,6 +341,8 @@ export type MonitorPosition = 'auto' | 0 | 1 | 2 | 3
 
 export interface DevPadConfig {
   setupComplete: boolean
+  /** Whether the interactive product tour has been completed/dismissed. */
+  tourComplete: boolean
   apiKeys: ApiKeys
   godotExecutablePath: string
   projectDir: string

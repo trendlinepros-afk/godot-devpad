@@ -25,6 +25,13 @@ Notes:
   publish installers to a separate PUBLIC releases repo (see docs) using a CI
   secret; nothing secret ships in the app.
 
+## Roadmap (future, not yet built)
+- **Managed API keys / membership:** move from user-supplied keys to Zirtola's
+  own keys gated behind a paid membership (server-side proxy holds the secrets;
+  nothing secret ships in the app). Local-key mode stays as a fallback/BYOK.
+- **Local models via Ollama:** let users point Zirtola at a local Ollama
+  endpoint and route any task slot to a local model (offline / free option).
+
 ## Key facts
 - Product name: **Zirtola — The AI Video Game Editor** (internal bridge name
   `window.devpad` is kept as-is).

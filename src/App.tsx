@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AppProvider, useApp } from './state/app'
+import { TourProvider, useTour } from './state/tour'
 import { ToastProvider, useToast } from './components/Toast'
 import { Toolbar } from './components/Toolbar'
 import { FileBrowser } from './components/FileBrowser'
@@ -88,9 +89,20 @@ function Shell({
   onOpenSettings: () => void
   onOpenProfiles: () => void
 }) {
+  const { config } = useApp()
+  const tour = useTour()
   const [leftTab, setLeftTab] = useState<LeftTab>('files')
   const [mainView, setMainView] = useState<MainView>('chat')
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null)
+
+  // Auto-start the guided tour the first time the user reaches the main app.
+  useEffect(() => {
+    if (config && !config.tourComplete) {
+      const t = setTimeout(() => tour.start(), 400)
+      return () => clearTimeout(t)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const openNote = (id: string) => {
     setActiveNoteId(id)
@@ -102,7 +114,7 @@ function Shell({
       <Toolbar onHome={onHome} onOpenSettings={onOpenSettings} onOpenProfiles={onOpenProfiles} />
       <div className="flex min-h-0 flex-1">
         {/* Left sidebar: Files / Notes */}
-        <aside className="flex w-64 shrink-0 flex-col border-r border-panel-600">
+        <aside className="flex w-64 shrink-0 flex-col border-r border-panel-600" data-tour="left-tabs">
           <TabBar
             tabs={[
               { key: 'files', label: 'Files' },
@@ -188,7 +200,9 @@ export default function App() {
   return (
     <ToastProvider>
       <AppProvider>
-        <Root />
+        <TourProvider>
+          <Root />
+        </TourProvider>
       </AppProvider>
     </ToastProvider>
   )
