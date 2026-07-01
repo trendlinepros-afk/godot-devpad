@@ -18,7 +18,15 @@ export function GodotConsole({ onShowChat }: Props) {
   const bodyRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    window.devpad.godot.getLogs().then(setLogs)
+    // Merge the initial snapshot with any live entries that raced ahead of it —
+    // replacing state outright would drop events that arrived first.
+    window.devpad.godot.getLogs().then((initial) => {
+      setLogs((prev) => {
+        const seen = new Set(initial.map((l) => l.id))
+        const merged = [...initial, ...prev.filter((l) => !seen.has(l.id))]
+        return merged.length > MAX ? merged.slice(merged.length - MAX) : merged
+      })
+    })
     const off = window.devpad.godot.onLog((entry) => {
       setLogs((prev) => {
         const next = [...prev, entry]
@@ -52,7 +60,7 @@ export function GodotConsole({ onShowChat }: Props) {
       { submit: true },
     )
     onShowChat()
-    toast('Asked the AI to fix the error', 'info')
+    toast('Sent the error to the AI chat', 'info')
   }
 
   return (

@@ -135,8 +135,13 @@ export function findWindowByPid(pid: number): Handle | null {
       }
       return true
     }, w.koffi.pointer(proto))
-    w.EnumWindows(cb, 0)
-    w.koffi.unregister(cb)
+    try {
+      w.EnumWindows(cb, 0)
+    } finally {
+      // koffi caps live registered callbacks; leak-free even if EnumWindows or
+      // the JS callback throws (this poll runs ~24× per embed attempt).
+      w.koffi.unregister(cb)
+    }
   } catch (err) {
     console.warn('[embed] findWindowByPid failed:', err)
     return null
@@ -190,6 +195,15 @@ export async function embed(
     return true
   } catch (err) {
     console.warn('[embed] embed failed:', err)
+    // We hid the window first — if anything after that failed, the user's game
+    // is invisible and half-restyled. Best-effort restore to a normal window.
+    try {
+      await callAsync(w.SetWindowLongPtr, childHwnd, GWLP_HWNDPARENT, 0)
+      await callAsync(w.SetWindowLongPtr, childHwnd, GWL_STYLE, WS_OVERLAPPEDWINDOW | WS_VISIBLE)
+      await callAsync(w.ShowWindow, childHwnd, SW_SHOW)
+    } catch {
+      /* window may already be gone */
+    }
     return false
   }
 }

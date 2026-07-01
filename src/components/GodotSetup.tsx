@@ -37,12 +37,18 @@ export function GodotSetup({ onConnected }: Props) {
 
   const download = async () => {
     setProgress({ phase: 'resolving', message: 'Starting…' })
-    const result = await window.devpad.godotInstall.download()
-    if (result.phase === 'done' && result.executablePath) {
-      toast('Godot downloaded and connected!', 'success')
-      onConnected(result.executablePath)
-    } else if (result.phase === 'error') {
-      toast(result.error ?? 'Download failed', 'error')
+    try {
+      const result = await window.devpad.godotInstall.download()
+      if (result.phase === 'done' && result.executablePath) {
+        toast('Godot downloaded and connected!', 'success')
+        onConnected(result.executablePath)
+      } else if (result.phase === 'error') {
+        toast(result.error ?? 'Download failed', 'error')
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Download failed'
+      setProgress({ phase: 'error', error: message })
+      toast(message, 'error')
     }
   }
 

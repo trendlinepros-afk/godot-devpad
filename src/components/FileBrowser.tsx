@@ -58,11 +58,14 @@ export function FileBrowser() {
       return
     }
     setLoading(true)
-    const node = await window.devpad.files.list(projectDir)
-    setRoot(node)
-    setChildrenCache(node ? { [node.path]: node.children ?? [] } : {})
-    setExpanded(node ? new Set([node.path]) : new Set())
-    setLoading(false)
+    try {
+      const node = await window.devpad.files.list(projectDir)
+      setRoot(node)
+      setChildrenCache(node ? { [node.path]: node.children ?? [] } : {})
+      setExpanded(node ? new Set([node.path]) : new Set())
+    } finally {
+      setLoading(false)
+    }
   }, [projectDir])
 
   useEffect(() => {
@@ -81,17 +84,18 @@ export function FileBrowser() {
 
   const toggle = async (node: FileNode) => {
     const isOpen = expanded.has(node.path)
-    const next = new Set(expanded)
-    if (isOpen) {
-      next.delete(node.path)
-    } else {
-      next.add(node.path)
-      if (!childrenCache[node.path]) {
-        const fetched = await window.devpad.files.list(node.path)
-        setChildrenCache((c) => ({ ...c, [node.path]: fetched?.children ?? [] }))
-      }
+    // Functional update — building the next Set before the await would clobber
+    // another folder toggled while this one's listing was loading.
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (isOpen) next.delete(node.path)
+      else next.add(node.path)
+      return next
+    })
+    if (!isOpen && !childrenCache[node.path]) {
+      const fetched = await window.devpad.files.list(node.path)
+      setChildrenCache((c) => ({ ...c, [node.path]: fetched?.children ?? [] }))
     }
-    setExpanded(next)
   }
 
   const openFile = async (node: FileNode) => {

@@ -108,25 +108,40 @@ function AiSection({ onOpenProfiles }: { onOpenProfiles: () => void }) {
   const { toast } = useToast()
   const [keys, setKeys] = useState(config?.apiKeys ?? { deepseek: '', gemini: '', openai: '' })
   const [testing, setTesting] = useState<ProviderId | null>(null)
+  const [keysDirty, setKeysDirty] = useState(false)
 
+  // Re-sync from config only when there's no key mid-edit — any unrelated
+  // config write would otherwise wipe a key typed but not yet blurred.
   useEffect(() => {
-    if (config) setKeys(config.apiKeys)
+    if (config && !keysDirty) setKeys(config.apiKeys)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config])
 
   if (!config) return null
 
+  const editKeys = (next: typeof keys) => {
+    setKeys(next)
+    setKeysDirty(true)
+  }
+
   const saveKeys = async (next: typeof keys) => {
     setKeys(next)
     await update({ apiKeys: next })
+    setKeysDirty(false)
   }
 
   const test = async (provider: ProviderId) => {
     setTesting(provider)
-    // Persist first so the main process tests the latest value.
-    await update({ apiKeys: keys })
-    const result = await window.devpad.ai.testConnection(provider)
-    setTesting(null)
-    toast(result.message, result.ok ? 'success' : 'error')
+    try {
+      // Persist first so the main process tests the latest value.
+      await saveKeys(keys)
+      const result = await window.devpad.ai.testConnection(provider)
+      toast(result.message, result.ok ? 'success' : 'error')
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Connection test failed', 'error')
+    } finally {
+      setTesting(null)
+    }
   }
 
   const keyRow = (label: string, provider: Exclude<ProviderId, 'mcp'>) => (
@@ -137,7 +152,7 @@ function AiSection({ onOpenProfiles }: { onOpenProfiles: () => void }) {
           type="password"
           value={keys[provider]}
           placeholder={`${label}…`}
-          onChange={(e) => setKeys({ ...keys, [provider]: e.target.value })}
+          onChange={(e) => editKeys({ ...keys, [provider]: e.target.value })}
           onBlur={() => saveKeys(keys)}
           className={inputClass}
         />
@@ -334,9 +349,14 @@ function McpSection() {
 
   const toggle = async () => {
     setBusy(true)
-    await window.devpad.mcp.setEnabled(!mcpStatus.enabled)
-    await refreshMcp()
-    setBusy(false)
+    try {
+      await window.devpad.mcp.setEnabled(!mcpStatus.enabled)
+      await refreshMcp()
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Could not toggle the MCP server', 'error')
+    } finally {
+      setBusy(false)
+    }
   }
 
   const snippet = `{
@@ -500,13 +520,18 @@ function VersionsSection() {
 
   const check = async () => {
     setChecking(true)
-    const result = await window.devpad.versions.checkUpdates()
-    await refreshVersions()
-    setChecking(false)
-    toast(
-      result.updated ? `Added: ${result.added.join(', ')}` : 'Version definitions are up to date',
-      result.updated ? 'success' : 'info',
-    )
+    try {
+      const result = await window.devpad.versions.checkUpdates()
+      await refreshVersions()
+      toast(
+        result.updated ? `Added: ${result.added.join(', ')}` : 'Version definitions are up to date',
+        result.updated ? 'success' : 'info',
+      )
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Version check failed', 'error')
+    } finally {
+      setChecking(false)
+    }
   }
 
   return (

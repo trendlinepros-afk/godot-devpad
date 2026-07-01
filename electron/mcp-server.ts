@@ -2,7 +2,7 @@ import express, { type Express, type Request, type Response } from 'express'
 import type { Server } from 'node:http'
 import type { McpStatus } from '@shared/types'
 import { captureGodotWindow } from './capture'
-import { listDir, readFileText } from './files'
+import { listDir, readFileText, resolveProjectPath } from './files'
 import { restartGodot, stopGodot } from './godot'
 import { getConfig } from './store'
 import { findVersionById } from './versions'
@@ -142,29 +142,25 @@ function buildManifest() {
   }
 }
 
-// Confine file/dir access to within the configured project directory so the MCP
-// server can't be used to read arbitrary files on disk.
-function withinProject(target: string): boolean {
-  const projectDir = getConfig().projectDir
-  if (!projectDir) return false
-  const path = require('node:path') as typeof import('node:path')
-  const resolved = path.resolve(target)
-  const root = path.resolve(projectDir)
-  return resolved === root || resolved.startsWith(root + path.sep)
-}
-
 function buildApp(): Express {
   const a = express()
   a.use(express.json({ limit: '20mb' }))
 
-  // Allow local cross-origin so a browser-based MCP client can reach it.
-  a.use((_req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*')
-    res.header('Access-Control-Allow-Headers', 'Content-Type')
-    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+  // Security: MCP clients (Claude Code etc.) are LOCAL processes — they never
+  // send an Origin header. Web pages always do, so rejecting any Origin blocks
+  // drive-by requests from sites open in a browser (which could otherwise
+  // screenshot the screen, read project files, or kill Godot). The Host check
+  // blocks DNS-rebinding attacks that bypass same-origin protections.
+  a.use((req, res, next) => {
+    const host = String(req.headers.host ?? '')
+    if (!/^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(host)) {
+      return res.status(403).json({ error: 'Forbidden host.' })
+    }
+    if (req.headers.origin) {
+      return res.status(403).json({ error: 'Browser origins are not allowed.' })
+    }
     next()
   })
-  a.options('*', (_req, res) => res.sendStatus(204))
 
   a.get('/manifest', (_req: Request, res: Response) => {
     res.json(buildManifest())
@@ -176,23 +172,26 @@ function buildApp(): Express {
     res.json({ screenshot: result.screenshot, source: result.source })
   })
 
+  // Paths are normalized through resolveProjectPath so res:// and
+  // project-relative paths work, and traversal/symlink escapes are rejected.
   a.post('/read_file', (req: Request, res: Response) => {
     const target = String(req.body?.path ?? '')
     if (!target) return res.status(400).json({ error: 'Missing "path".' })
-    if (!withinProject(target)) {
+    const abs = resolveProjectPath(target)
+    if (!abs) {
       return res.status(403).json({ error: 'Path is outside the project directory.' })
     }
-    const result = readFileText(target)
+    const result = readFileText(abs)
     if (!result.ok) return res.status(404).json({ error: result.error })
     res.json({ contents: result.contents })
   })
 
   a.post('/list_files', (req: Request, res: Response) => {
-    const dir = String(req.body?.dir ?? getConfig().projectDir)
-    if (!withinProject(dir)) {
+    const abs = resolveProjectPath(String(req.body?.dir ?? ''))
+    if (!abs) {
       return res.status(403).json({ error: 'Directory is outside the project directory.' })
     }
-    const tree = listDir(dir)
+    const tree = listDir(abs)
     if (!tree) return res.status(404).json({ error: 'Directory not found.' })
     res.json({ tree })
   })

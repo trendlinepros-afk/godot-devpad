@@ -1,6 +1,6 @@
 {
   "name": "zirtola",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "description": "Zirtola — The AI Video Game Editor. A local-first Godot game development companion with an integrated AI assistant.",
   "author": "Zirtola",
   "license": "MIT",
@@ -14,7 +14,7 @@
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "eval:models": "node scripts/gdscript-eval.mjs",
-    "dist": "npm run build && electron-builder"
+    "dist": "node -e \"const fs=require('fs');for(const d of ['dist','dist-electron'])fs.rmSync(d,{recursive:true,force:true})\" && npm run build && electron-builder"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
@@ -84,7 +84,7 @@
       "allowToChangeInstallationDirectory": true
     },
     "mac": {
-      "target": "dmg"
+      "target": ["dmg", "zip"]
     }
   }
 }

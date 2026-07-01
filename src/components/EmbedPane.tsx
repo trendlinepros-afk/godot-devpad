@@ -63,6 +63,16 @@ export function EmbedPane({ active, onOpenSettings }: Props) {
     if (mode !== 'embedded') window.devpad.embed.clear()
   }, [mode])
 
+  // Safety net: if this pane ever unmounts while the game is docked, park the
+  // native window offscreen instead of leaving it painted over whatever
+  // replaced the pane.
+  useEffect(
+    () => () => {
+      window.devpad.embed.setBounds({ ...OFFSCREEN, dpr: window.devicePixelRatio || 1 })
+    },
+    [],
+  )
+
   // The embed can complete while the pane is still reporting its initial
   // off-screen rect (tab-switch vs. embed race). As soon as the main process
   // confirms the window is embedded, push the pane's real bounds so the game

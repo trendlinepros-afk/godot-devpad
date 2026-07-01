@@ -37,13 +37,18 @@ export function UpdateControls({ compact = false }: { compact?: boolean }) {
 
   const check = async () => {
     setBusy(true)
-    const result = await window.devpad.updates.check()
-    setBusy(false)
-    if (result.state === 'not-available') toast('Zirtola is up to date', 'success')
-    else if (result.state === 'unsupported') toast(result.error ?? updateLabel(result), 'info')
-    else if (result.state === 'available' || result.state === 'downloading')
-      toast(`Update found: v${result.newVersion} — downloading…`, 'info')
-    else if (result.state === 'error') toast(result.error ?? 'Update check failed', 'error')
+    try {
+      const result = await window.devpad.updates.check()
+      if (result.state === 'not-available') toast('Zirtola is up to date', 'success')
+      else if (result.state === 'unsupported') toast(result.error ?? updateLabel(result), 'info')
+      else if (result.state === 'available' || result.state === 'downloading')
+        toast(`Update found: v${result.newVersion} — downloading…`, 'info')
+      else if (result.state === 'error') toast(result.error ?? 'Update check failed', 'error')
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Update check failed', 'error')
+    } finally {
+      setBusy(false)
+    }
   }
 
   const install = () => window.devpad.updates.install()

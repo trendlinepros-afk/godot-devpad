@@ -47,16 +47,31 @@ function setStatus(patch: Partial<BridgeStatus>): void {
 
 export function startBridgeServer(): void {
   if (wss) return
-  wss = new WebSocketServer({ host: '127.0.0.1', port: BRIDGE_PORT })
+  wss = new WebSocketServer({
+    host: '127.0.0.1',
+    port: BRIDGE_PORT,
+    // The Godot addon is a local process and sends no Origin header. Browsers
+    // ALWAYS send one on ws:// connections, so rejecting any Origin blocks
+    // web pages from connecting (they could otherwise evict the editor, spoof
+    // scene events, and forge RPC responses).
+    verifyClient: ({ origin }: { origin?: string }) => !origin,
+  })
 
   wss.on('connection', (ws) => {
-    // Latest editor wins; drop any previous connection.
+    // Latest editor wins; drop any previous connection and fail its in-flight
+    // requests — their responses would arrive on a dead socket (or worse,
+    // resolve against the new one via the shared pending map).
     if (socket && socket !== ws) {
       try {
         socket.close()
       } catch {
         /* ignore */
       }
+      for (const [, p] of pending) {
+        clearTimeout(p.timer)
+        p.reject(new Error('Godot editor reconnected; request cancelled.'))
+      }
+      pending.clear()
     }
     socket = ws
     setStatus({ connected: true })
@@ -139,7 +154,14 @@ export function bridgeRequest<T = unknown>(
       reject(new Error(`Godot did not respond to "${method}" in time.`))
     }, 12000)
     pending.set(id, { resolve: resolve as (v: unknown) => void, reject, timer })
-    socket.send(JSON.stringify({ id, method, params: params ?? {} }))
+    socket.send(JSON.stringify({ id, method, params: params ?? {} }), (err) => {
+      // Fail fast on send errors instead of waiting out the 12s timeout.
+      if (err && pending.has(id)) {
+        pending.delete(id)
+        clearTimeout(timer)
+        reject(err)
+      }
+    })
   })
 }
 

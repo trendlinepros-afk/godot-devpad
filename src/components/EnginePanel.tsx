@@ -51,12 +51,17 @@ export function EnginePanel({ onShowChat }: Props) {
 
   const install = async () => {
     setInstalling(true)
-    const res = await window.devpad.bridge.installAddon()
-    setInstalling(false)
-    if (res.ok) {
-      toast('Bridge addon installed. Open (or reload) the project in Godot to connect.', 'success')
-    } else {
-      toast(res.error ?? 'Could not install the addon', 'error')
+    try {
+      const res = await window.devpad.bridge.installAddon()
+      if (res.ok) {
+        toast('Bridge addon installed. Open (or reload) the project in Godot to connect.', 'success')
+      } else {
+        toast(res.error ?? 'Could not install the addon', 'error')
+      }
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Could not install the addon', 'error')
+    } finally {
+      setInstalling(false)
     }
   }
 

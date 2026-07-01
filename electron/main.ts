@@ -9,7 +9,7 @@ import type {
   MonitorPosition,
   ProviderId,
 } from '@shared/types'
-import { store, getConfig, setMany, ensureDefaultProfiles } from './store'
+import { store, getConfig, setMany, setKey, ensureDefaultProfiles } from './store'
 import {
   runGodot,
   stopGodot,
@@ -175,6 +175,13 @@ async function attemptEmbed(): Promise<void> {
       const hwnd = findWindowByPid(pid)
       if (hwnd != null && lastEmbedRect && mainWindow) {
         const ok = await embedWindow(mainWindow.getNativeWindowHandle(), hwnd, paneScreenRect(lastEmbedRect))
+        // Godot may have exited (or the mode changed) while embedWindow was in
+        // flight — committing then would leave embedActive pointing at a dead
+        // HWND and block every future attempt until a mode toggle.
+        if (getGodotPid() !== pid || getConfig().godotWindowMode !== 'embedded') {
+          if (ok) void detachWindow(hwnd)
+          return
+        }
         embeddedHwnd = ok ? hwnd : null
         embedActive = ok
         if (ok) void attachInput(hwnd, true) // focus + foreground the fresh game
@@ -200,15 +207,34 @@ function clearEmbed(): void {
 
 // ── Window creation ──────────────────────────────────────────────────────────
 
+/**
+ * True when the saved window position is still visible on some display —
+ * monitors get unplugged and resolutions change between runs, and restoring
+ * an off-screen position would make the app launch invisible.
+ */
+function boundsOnScreen(b: { x?: number; y?: number; width: number; height: number }): boolean {
+  if (b.x == null || b.y == null) return false
+  return screen.getAllDisplays().some((d) => {
+    const a = d.workArea
+    // Require a meaningful overlap, not just a 1px corner.
+    const overlapX = Math.min(b.x! + b.width, a.x + a.width) - Math.max(b.x!, a.x)
+    const overlapY = Math.min(b.y! + b.height, a.y + a.height) - Math.max(b.y!, a.y)
+    return overlapX > 100 && overlapY > 100
+  })
+}
+
 function createWindow(): void {
   const cfg = getConfig()
   const bounds = cfg.windowBounds ?? { width: 1200, height: 800 }
+  const onScreen = boundsOnScreen(bounds)
 
   mainWindow = new BrowserWindow({
     width: bounds.width,
     height: bounds.height,
-    x: bounds.x,
-    y: bounds.y,
+    // Omit x/y (Electron centers the window) when the saved spot is no longer
+    // on any connected display.
+    x: onScreen ? bounds.x : undefined,
+    y: onScreen ? bounds.y : undefined,
     minWidth: 900,
     minHeight: 600,
     backgroundColor: '#0e1116',
@@ -237,6 +263,7 @@ function createWindow(): void {
   // experimental Windows embed on run/stop.
   onGodotStatusChange((status) => {
     mainWindow?.webContents.send('godot:statusChange', status)
+    syncHotkeys() // hotkeys stay global while a game runs, released otherwise
     if (status.state === 'stopped') clearEmbed()
     else if (status.state === 'running' && getConfig().godotWindowMode === 'embedded') {
       attemptEmbed()
@@ -265,7 +292,22 @@ function createWindow(): void {
   })
 }
 
-// ── Global hotkeys (work even when DevPad is not focused) ─────────────────────
+// ── Global hotkeys ────────────────────────────────────────────────────────────
+// F5/F6/F7 are registered as GLOBAL shortcuts so Stop/Restart still work while
+// the (embedded) game window has focus — but only while Zirtola is focused or a
+// game is running. Otherwise we release them: holding F5 system-wide would
+// hijack Run Project inside the real Godot editor and refresh in browsers.
+
+let hotkeysActive = false
+
+function syncHotkeys(): void {
+  const focused = BrowserWindow.getFocusedWindow() != null
+  const want = focused || getGodotStatus().state !== 'stopped'
+  if (want === hotkeysActive) return
+  hotkeysActive = want
+  if (want) registerHotkeys()
+  else globalShortcut.unregisterAll()
+}
 
 function registerHotkeys(): void {
   const send = (action: 'run' | 'stop' | 'restart') => {
@@ -308,7 +350,7 @@ function registerIpc(): void {
   ipcMain.handle('config:getAll', () => getConfig())
   ipcMain.handle('config:get', (_e, key: keyof DevPadConfig) => store.get(key))
   ipcMain.handle('config:set', (_e, key: keyof DevPadConfig, value: unknown) => {
-    store.set(key as keyof DevPadConfig, value as never)
+    setKey(key, value)
   })
   ipcMain.handle('config:setMany', (_e, partial: Partial<DevPadConfig>) => setMany(partial))
 
@@ -449,7 +491,9 @@ app.whenReady().then(async () => {
   ensureDefaultProfiles()
   registerIpc()
   createWindow()
-  registerHotkeys()
+  syncHotkeys()
+  app.on('browser-window-focus', syncHotkeys)
+  app.on('browser-window-blur', () => setTimeout(syncHotkeys, 50)) // let focus settle
 
   // Start the live editor bridge and forward its status/events to the renderer.
   setBridgeHandlers({

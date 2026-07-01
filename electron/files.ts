@@ -137,7 +137,32 @@ export function resolveProjectPath(p: string): string | null {
   const abs = path.resolve(path.isAbsolute(rel) ? rel : path.join(dir, rel))
   const root = path.resolve(dir)
   if (abs !== root && !abs.startsWith(root + path.sep)) return null
+  // Lexical check passed — also resolve symlinks, or a link inside the project
+  // pointing elsewhere would let reads/writes escape the folder.
+  const realRoot = tryRealpath(root) ?? root
+  const realBase = realpathOfExistingAncestor(abs)
+  if (realBase && realBase !== realRoot && !realBase.startsWith(realRoot + path.sep)) return null
   return abs
+}
+
+function tryRealpath(p: string): string | null {
+  try {
+    return fs.realpathSync(p)
+  } catch {
+    return null
+  }
+}
+
+/** Real path of `p`, or of its deepest existing ancestor (targets of writes may not exist yet). */
+function realpathOfExistingAncestor(p: string): string | null {
+  let cur = p
+  for (;;) {
+    const real = tryRealpath(cur)
+    if (real) return real
+    const parent = path.dirname(cur)
+    if (parent === cur) return null
+    cur = parent
+  }
 }
 
 /** For reads: resolve res:// within the project, else use the path as given. */
@@ -161,7 +186,12 @@ export async function applyEdit(edit: FileEdit): Promise<ApplyEditResult> {
       if (cp.ok) checkpointHash = cp.hash
     }
     fs.mkdirSync(path.dirname(abs), { recursive: true })
-    fs.writeFileSync(abs, edit.contents, 'utf-8')
+    // Atomic write: a crash/disk-full mid-write must not leave a truncated
+    // file that Godot could immediately hot-reload. (.tmp files are already
+    // filtered from listings above.)
+    const tmp = `${abs}.tmp`
+    fs.writeFileSync(tmp, edit.contents, 'utf-8')
+    fs.renameSync(tmp, abs)
     return { ok: true, path: abs, checkpoint: checkpointHash }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }

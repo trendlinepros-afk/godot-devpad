@@ -40,13 +40,18 @@ export function AssetStudio({ onClose, onOpenSettings }: Props) {
     setBusy(true)
     setNeedsSettings(false)
     setSavedPath(null)
-    const res = await window.devpad.assets.generate({ prompt: prompt.trim(), kind, size })
-    setBusy(false)
-    if (res.ok && res.base64) {
-      setImage(res.base64)
-    } else {
-      setNeedsSettings(!!res.needsSettings)
-      toast(res.error ?? 'Generation failed', 'error')
+    try {
+      const res = await window.devpad.assets.generate({ prompt: prompt.trim(), kind, size })
+      if (res.ok && res.base64) {
+        setImage(res.base64)
+      } else {
+        setNeedsSettings(!!res.needsSettings)
+        toast(res.error ?? 'Generation failed', 'error')
+      }
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Generation failed', 'error')
+    } finally {
+      setBusy(false)
     }
   }
 

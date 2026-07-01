@@ -33,8 +33,12 @@ export function ModelProfileEditor({ onClose }: Props) {
   )
   const [dirty, setDirty] = useState(false)
 
+  // Re-sync from config only while there are no local edits — any config write
+  // (Set Active, a toolbar toggle elsewhere…) would otherwise silently wipe
+  // unsaved changes while the footer still says "Unsaved changes".
   useEffect(() => {
-    if (config) setProfiles(config.profiles)
+    if (config && !dirty) setProfiles(config.profiles)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config])
 
   if (!config) return null

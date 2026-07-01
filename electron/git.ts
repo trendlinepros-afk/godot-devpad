@@ -117,10 +117,17 @@ export async function restoreCheckpoint(
 ): Promise<{ ok: boolean; error?: string }> {
   const dir = projectDir()
   if (!dir || !fs.existsSync(dir)) return { ok: false, error: 'No project folder set.' }
+  // The hash comes over IPC — accept only a real commit hash, not refs/branch
+  // names/option-like strings that would restore from an unintended source.
+  if (!/^[0-9a-f]{7,40}$/i.test(hash)) {
+    return { ok: false, error: 'Invalid checkpoint reference.' }
+  }
   try {
     await checkpoint('Before restore')
-    // Checkout the tree of the checkpoint commit into the working directory.
-    await git(dir, ['checkout', hash, '--', '.'])
+    // Restore the checkpoint's tree into the WORKING TREE only — `checkout
+    // <hash> -- .` would also write every file into the user's staging area,
+    // breaking the "we never touch your git state" contract above.
+    await git(dir, ['restore', '--source', hash, '--worktree', '--', '.'])
     return { ok: true }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }

@@ -174,7 +174,21 @@ function findExecutable(dir: string): string | null {
  * Download the latest stable Godot for this platform and extract it into
  * DevPad's managed folder. Reports progress via `onProgress`.
  */
-export async function downloadGodot(
+let downloadInFlight: Promise<GodotDownloadProgress> | null = null
+
+export function downloadGodot(
+  onProgress: (p: GodotDownloadProgress) => void,
+): Promise<GodotDownloadProgress> {
+  // Single-flight: a second concurrent call (double-click, re-render) would
+  // write to the same zip path and corrupt the archive.
+  if (downloadInFlight) return downloadInFlight
+  downloadInFlight = doDownloadGodot(onProgress).finally(() => {
+    downloadInFlight = null
+  })
+  return downloadInFlight
+}
+
+async function doDownloadGodot(
   onProgress: (p: GodotDownloadProgress) => void,
 ): Promise<GodotDownloadProgress> {
   const emit = (p: GodotDownloadProgress) => {

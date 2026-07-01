@@ -115,6 +115,8 @@ async function callGemini(call: ProviderCall, apiKey: string): Promise<string> {
 async function callMcp(call: ProviderCall, port: number): Promise<string> {
   const res = await fetch(`http://localhost:${port}/chat`, {
     method: 'POST',
+    // Without a timeout a wedged server would leave the chat spinner up forever.
+    signal: AbortSignal.timeout(60_000),
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       systemPrompt: call.systemPrompt,
@@ -293,6 +295,11 @@ async function callGeminiAgentic(
     }
     result = await chat.sendMessage(responses)
   }
+  // Hit the iteration cap and the model may still be requesting tools — a
+  // function-call-only response has empty text, so explicitly ask it to answer.
+  const text = result.response.text()
+  if (text.trim()) return text
+  result = await chat.sendMessage('Now give your final answer using what you have read so far.')
   return result.response.text()
 }
 
@@ -325,8 +332,14 @@ export async function callProviderAgentic(
     }
   } catch (err) {
     if (err instanceof MissingKeyError) throw err
-    // Tool calling may be unsupported or transiently fail — fall back to plain.
-    console.warn('[ai] agentic call failed, falling back to plain completion:', err)
+    // Only fall back to a plain completion when the error suggests the model/
+    // endpoint doesn't support tool calling. Rethrowing everything else (rate
+    // limits, auth, network) surfaces the REAL error instead of silently
+    // re-running the whole request without file access and doubling cost.
+    const text = err instanceof Error ? err.message : String(err)
+    const toolsUnsupported = /tool|function/i.test(text) && /support|invalid|unknown|unexpected/i.test(text)
+    if (!toolsUnsupported) throw err
+    console.warn('[ai] tools appear unsupported, falling back to plain completion:', err)
     return callProvider(call, keys, mcpPort)
   }
 }

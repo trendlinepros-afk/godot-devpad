@@ -41,17 +41,17 @@ export function clearLogs(): void {
 // Matches a res:// path with an optional :line suffix in a GDScript message.
 const RES_RE = /(res:\/\/[^\s():'"]+\.(?:gd|cs|gdshader|tscn|tres))(?::(\d+))?/
 
-function classify(text: string): LogLevel {
+function classify(text: string, fallback: LogLevel = 'info'): LogLevel {
   const t = text.toUpperCase()
   if (t.includes('SCRIPT ERROR') || t.includes('ERROR:') || t.startsWith('ERROR')) return 'error'
   if (t.includes('WARNING') || t.includes('WARN:')) return 'warn'
-  return 'info'
+  return fallback
 }
 
-function pushLog(rawLine: string, forced?: LogLevel): void {
+function pushLog(rawLine: string, forced?: LogLevel, fallback: LogLevel = 'info'): void {
   const text = rawLine.replace(/\r$/, '')
   if (!text.trim()) return
-  const level = forced ?? classify(text)
+  const level = forced ?? classify(text, fallback)
   const match = RES_RE.exec(text)
   const entry: GodotLogEntry = {
     id: ++logCounter,
@@ -73,7 +73,9 @@ function consume(chunk: Buffer, which: 'out' | 'err'): void {
   const remainder = parts.pop() ?? ''
   if (which === 'out') stdoutTail = remainder
   else stderrTail = remainder
-  for (const line of parts) pushLog(line, which === 'err' ? undefined : undefined)
+  // stderr lines that don't match known error/warning markers still default to
+  // 'error' — crash text and stack traces rarely carry an "ERROR:" prefix.
+  for (const line of parts) pushLog(line, undefined, which === 'err' ? 'error' : 'info')
 }
 
 export function onStatusChange(cb: (s: GodotStatus) => void): void {
@@ -156,20 +158,33 @@ export function runGodot(): GodotStatus {
   }
 
   pushLog(`▶ Launching ${exe} ${args.join(' ')}`, 'info')
-  child.stdout?.on('data', (chunk: Buffer) => consume(chunk, 'out'))
-  child.stderr?.on('data', (chunk: Buffer) => consume(chunk, 'err'))
 
-  child.on('spawn', () => setState('running'))
-  child.on('error', (err) => {
+  // Guard every handler against a superseded child: restart() kills the old
+  // process and spawns a new one immediately, so the old process's async
+  // exit/error events must not clobber the new child's state.
+  const proc = child
+  proc.stdout?.on('data', (chunk: Buffer) => {
+    if (child === proc) consume(chunk, 'out')
+  })
+  proc.stderr?.on('data', (chunk: Buffer) => {
+    if (child === proc) consume(chunk, 'err')
+  })
+
+  proc.on('spawn', () => {
+    if (child === proc) setState('running')
+  })
+  proc.on('error', (err) => {
+    if (child !== proc) return
     child = null
     pushLog(`Godot process error: ${err.message}`, 'error')
     setState('stopped', `Godot process error: ${err.message}`)
   })
-  child.on('exit', (code) => {
+  proc.on('exit', (code) => {
+    if (child !== proc) return
     child = null
     // Flush any partial trailing lines.
-    if (stdoutTail.trim()) pushLog(stdoutTail)
-    if (stderrTail.trim()) pushLog(stderrTail)
+    if (stdoutTail.trim()) pushLog(stdoutTail, undefined, 'info')
+    if (stderrTail.trim()) pushLog(stderrTail, undefined, 'error')
     stdoutTail = ''
     stderrTail = ''
     pushLog(`■ Godot exited (code ${code ?? 0})`, code === 0 ? 'info' : 'error')
@@ -192,6 +207,10 @@ export function stopGodot(): GodotStatus {
     } catch (err) {
       console.error('[godot] failed to kill process', err)
     }
+    // The exit handler skips superseded processes, so log the stop here.
+    stdoutTail = ''
+    stderrTail = ''
+    pushLog('■ Godot stopped', 'info')
   }
   setState('stopped')
   return getStatus()

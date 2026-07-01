@@ -98,6 +98,13 @@ export function NoteEditor({ noteId, onSelect }: Props) {
 
   const remove = async () => {
     if (!note) return
+    // Cancel any pending debounced save first — the note-switch cleanup would
+    // otherwise flush it and resurrect the note we just deleted.
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current)
+      saveTimer.current = null
+    }
+    latest.current = null
     await update({ notes: deleteNote(config?.notes ?? [], note.id) })
     onSelect(null)
     toast('Note deleted', 'info')

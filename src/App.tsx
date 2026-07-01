@@ -26,6 +26,13 @@ function Root() {
   const [profilesOpen, setProfilesOpen] = useState(false)
   const [wizardDone, setWizardDone] = useState(false)
   const [view, setView] = useState<View>('launcher')
+  // Once the user has entered the app, keep the Shell MOUNTED (hidden) behind
+  // the launcher: unmounting it would irreversibly wipe the chat conversation
+  // and strand the embedded Godot window over the launcher.
+  const [entered, setEntered] = useState(false)
+  useEffect(() => {
+    if (view === 'app') setEntered(true)
+  }, [view])
 
   // Subtle toast + refresh when version definitions are merged from remote.
   useEffect(() => {
@@ -60,14 +67,18 @@ function Root() {
 
   return (
     <>
-      {view === 'launcher' ? (
+      {view === 'launcher' && (
         <Launcher onEnter={() => setView('app')} onOpenSettings={() => setSettingsOpen(true)} />
-      ) : (
-        <Shell
-          onHome={() => setView('launcher')}
-          onOpenSettings={() => setSettingsOpen(true)}
-          onOpenProfiles={() => setProfilesOpen(true)}
-        />
+      )}
+      {(view === 'app' || entered) && (
+        <div className={view === 'app' ? 'contents' : 'hidden'}>
+          <Shell
+            visible={view === 'app'}
+            onHome={() => setView('launcher')}
+            onOpenSettings={() => setSettingsOpen(true)}
+            onOpenProfiles={() => setProfilesOpen(true)}
+          />
+        </div>
       )}
 
       {settingsOpen && (
@@ -82,10 +93,12 @@ function Root() {
 }
 
 function Shell({
+  visible,
   onHome,
   onOpenSettings,
   onOpenProfiles,
 }: {
+  visible: boolean
   onHome: () => void
   onOpenSettings: () => void
   onOpenProfiles: () => void
@@ -189,7 +202,9 @@ function Shell({
             </div>
             {/* Game pane stays mounted so it can report bounds for the embed. */}
             <div className={`h-full ${mainView === 'game' ? '' : 'hidden'}`}>
-              <EmbedPane active={mainView === 'game'} onOpenSettings={onOpenSettings} />
+              {/* `visible` matters: when the user goes Home the Shell is hidden
+                  (not unmounted), and the native window must park offscreen. */}
+              <EmbedPane active={visible && mainView === 'game'} onOpenSettings={onOpenSettings} />
             </div>
           </div>
         </main>

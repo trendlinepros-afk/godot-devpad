@@ -62,11 +62,13 @@ export function Toolbar({ onHome, onOpenSettings, onOpenProfiles }: ToolbarProps
     return () => document.removeEventListener('mousedown', onClick)
   }, [])
 
-  // Surface launcher errors (e.g. Godot not installed) coming from the main process.
+  // Surface launcher errors (e.g. Godot not installed) coming from the main
+  // process. Keyed on the status OBJECT (new on every update), not the message
+  // string — pressing Run twice with the same failure must toast both times.
   useEffect(() => {
     if (godotStatus.message) toast(godotStatus.message, 'error')
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [godotStatus.message])
+  }, [godotStatus])
 
   // Respond to global hotkeys triggered from the main process so the toast/status
   // feedback is consistent with button clicks.

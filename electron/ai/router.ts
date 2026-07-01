@@ -123,6 +123,7 @@ Rules:
 - Use the res:// path relative to the project root (e.g. res://scripts/player.gd). Create new files the same way.
 - You may include multiple edit blocks in one reply; add a short explanation before each.
 - Only use a zirtola-edit block when you actually want to change a file on disk. For illustrative code the developer should NOT apply, use a normal \`\`\`gdscript block instead.
+- The closing \`\`\` must be ALONE at the start of its own line. If the file's contents themselves contain \`\`\` lines (e.g. a markdown file), use a LONGER outer fence (\`\`\`\`zirtola-edit … closed by \`\`\`\`) so the block doesn't end early.
 - The developer reviews a diff and approves each change before it is written, so prefer complete, working files.`
 
 // Instructs the model how to propose scene changes that are applied THROUGH the

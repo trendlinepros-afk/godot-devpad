@@ -20,8 +20,14 @@ export interface SceneSegment {
 }
 export type Segment = TextSegment | EditSegment | SceneSegment
 
+// The closing fence must sit ALONE at the start of its own line — matching any
+// "```" (the old behaviour) truncated files that legitimately contain fences
+// (markdown docs, GDScript doc comments) and, in Auto mode, wrote the truncated
+// file to disk. The fence may be 3+ backticks (\1 backreference: the closer
+// must match the opener's length) so models can wrap fence-containing files in
+// a longer outer fence, exactly like GitHub-flavored markdown.
 const BLOCK_RE =
-  /```zirtola-(edit|scene)(?:\s+path=["']([^"']+)["'])?[^\n]*\r?\n([\s\S]*?)```/g
+  /(`{3,})zirtola-(edit|scene)(?:\s+path=["']([^"']+)["'])?[^\n]*\r?\n([\s\S]*?)\r?\n\1[ \t]*(?=\r?\n|$)/g
 
 export function parseSegments(content: string): Segment[] {
   const segments: Segment[] = []
@@ -35,10 +41,10 @@ export function parseSegments(content: string): Segment[] {
       if (text.trim()) segments.push({ type: 'text', value: text })
     }
 
-    const kind = match[1]
-    const body = match[3]
+    const kind = match[2]
+    const body = match[4]
     if (kind === 'edit') {
-      segments.push({ type: 'edit', path: (match[2] ?? '').trim(), contents: body.replace(/\n$/, '') })
+      segments.push({ type: 'edit', path: (match[3] ?? '').trim(), contents: body.replace(/\n$/, '') })
     } else {
       // scene
       try {

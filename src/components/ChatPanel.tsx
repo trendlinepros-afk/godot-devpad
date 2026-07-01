@@ -19,6 +19,9 @@ interface ChatMessage {
   modelLabel?: string
   error?: boolean
   needsSettings?: boolean
+  // Captured at the moment the reply arrived — switching the toolbar to Auto
+  // later must NOT retroactively apply old pending edit cards.
+  autoApply?: boolean
 }
 
 interface ChatPanelProps {
@@ -35,7 +38,6 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
   const [lastModel, setLastModel] = useState<string | null>(null)
   // Autonomy mode is global (toolbar): 'chat' read-only, 'ask' approve, 'auto' apply.
   const agentMode = config?.agentMode ?? 'ask'
-  const autoApply = agentMode === 'auto'
   const counter = useRef(0)
   const feedRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -47,7 +49,15 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
   useEffect(() => {
     chatBus.setListener((text, opts) => {
       if (opts?.submit) {
-        sendRef.current({ text })
+        void sendRef.current({ text }).then((sent) => {
+          // Chat was busy — don't drop the request silently; queue it in the
+          // composer and tell the user.
+          if (!sent) {
+            setInput((prev) => (prev ? `${prev}\n${text}` : text))
+            inputRef.current?.focus()
+            toast('The AI is busy — your request is in the message box, press Send.', 'info')
+          }
+        })
         return
       }
       setInput((prev) => (prev ? `${prev}\n${text}` : text))
@@ -61,7 +71,7 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
       chatBus.setListener(null)
       chatBus.setAttachListener(null)
     }
-  }, [])
+  }, [toast])
 
   // Auto-scroll to the newest message.
   useEffect(() => {
@@ -84,9 +94,9 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
   }, [toast])
 
   const send = useCallback(
-    async (override?: { text?: string }) => {
+    async (override?: { text?: string; mode?: 'plan' | 'build' }): Promise<boolean> => {
       const text = (override?.text ?? input).trim()
-      if ((!text && !screenshot) || busy) return
+      if ((!text && !screenshot) || busy) return false
 
       const history: ChatMessageInput[] = messages
         .filter((m) => !m.error)
@@ -104,32 +114,43 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
       setScreenshot(null)
       setBusy(true)
 
-      const res = await routeMessage({
-        text,
-        screenshot: attached,
-        history,
-        mode: agentMode === 'chat' ? 'plan' : 'build',
-      })
+      try {
+        const res = await routeMessage({
+          text,
+          screenshot: attached,
+          history,
+          mode: override?.mode ?? (agentMode === 'chat' ? 'plan' : 'build'),
+        })
 
-      setBusy(false)
-      if (res.ok) {
-        setLastModel(res.modelLabel ?? res.modelId ?? null)
-        setMessages((m) => [
-          ...m,
-          { id: nextId(), role: 'assistant', content: res.text, modelLabel: res.modelLabel },
-        ])
-      } else {
-        setMessages((m) => [
-          ...m,
-          {
-            id: nextId(),
-            role: 'assistant',
-            content: res.error ?? 'Something went wrong.',
-            error: true,
-            needsSettings: res.needsSettings,
-          },
-        ])
+        if (res.ok) {
+          setLastModel(res.modelLabel ?? res.modelId ?? null)
+          setMessages((m) => [
+            ...m,
+            {
+              id: nextId(),
+              role: 'assistant',
+              content: res.text,
+              modelLabel: res.modelLabel,
+              autoApply: agentMode === 'auto',
+            },
+          ])
+        } else {
+          setMessages((m) => [
+            ...m,
+            {
+              id: nextId(),
+              role: 'assistant',
+              content: res.error ?? 'Something went wrong.',
+              error: true,
+              needsSettings: res.needsSettings,
+            },
+          ])
+        }
+      } finally {
+        // Never leave the "Thinking…" state stuck if routing throws.
+        setBusy(false)
       }
+      return true
     },
     [input, screenshot, busy, messages, agentMode],
   )
@@ -139,10 +160,14 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
   sendRef.current = send
 
   // Approve the plan: switch to Ask mode and tell the AI to implement it.
+  // The mode is passed explicitly — `send`'s closure still sees the old
+  // agentMode ('chat' → 'plan') until the config update re-renders, which
+  // would make the AI answer with yet another plan instead of building.
   const approvePlan = async () => {
     await update({ agentMode: 'ask' })
     sendRef.current({
       text: 'The plan looks good. Implement it now — make the file and scene edits.',
+      mode: 'build',
     })
   }
 
@@ -203,12 +228,7 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
           </div>
         )}
         {messages.map((m) => (
-          <MessageBubble
-            key={m.id}
-            message={m}
-            onOpenSettings={onOpenSettings}
-            autoApply={autoApply}
-          />
+          <MessageBubble key={m.id} message={m} onOpenSettings={onOpenSettings} />
         ))}
         {busy && (
           <div className="flex items-center gap-2 text-sm text-slate-400">
@@ -289,12 +309,12 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
 function MessageBubble({
   message,
   onOpenSettings,
-  autoApply,
 }: {
   message: ChatMessage
   onOpenSettings: () => void
-  autoApply: boolean
 }) {
+  // Per-message: only replies that arrived while in Auto mode self-apply.
+  const autoApply = message.autoApply ?? false
   const isUser = message.role === 'user'
   const segments = !isUser && !message.error ? parseSegments(message.content) : null
   const containsEdit = segments?.some((s) => s.type === 'edit' || s.type === 'scene') ?? false

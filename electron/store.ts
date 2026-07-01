@@ -69,7 +69,13 @@ export function getConfig(): DevPadConfig {
 
 export function setMany(partial: Partial<DevPadConfig>): DevPadConfig {
   for (const [key, value] of Object.entries(partial)) {
-    store.set(key as keyof DevPadConfig, value as never)
+    setKey(key as keyof DevPadConfig, value)
   }
   return store.store
+}
+
+/** conf throws on set(key, undefined) — treat undefined as "clear this key". */
+export function setKey(key: keyof DevPadConfig, value: unknown): void {
+  if (value === undefined) store.delete(key)
+  else store.set(key, value as never)
 }
