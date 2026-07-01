@@ -104,8 +104,8 @@ export function EmbedPane({ active, onOpenSettings }: Props) {
   } else if (!status.active) {
     message = (
       <Message
-        title="Connecting to the Godot window…"
-        body={status.message ?? 'Looking for the running game window to embed.'}
+        title="Launching Godot And Attaching To Zirtola Editor"
+        body={status.message ?? 'Depending on the size of the game this could take a moment.'}
       />
     )
   }
