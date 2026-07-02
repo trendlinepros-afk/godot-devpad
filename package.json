@@ -1,6 +1,6 @@
 {
   "name": "zirtola",
-  "version": "0.1.22",
+  "version": "0.1.23",
   "description": "Zirtola \u2014 The AI Video Game Editor. A local-first Godot game development companion with an integrated AI assistant.",
   "author": "Zirtola",
   "license": "MIT",
@@ -80,8 +80,7 @@
       "target": [
         "nsis",
         "msi"
-      ],
-      "publisherName": "Zirtola"
+      ]
     },
     "nsis": {
       "oneClick": false,
