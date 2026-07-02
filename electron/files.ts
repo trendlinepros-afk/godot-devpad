@@ -180,10 +180,17 @@ export async function applyEdit(edit: FileEdit): Promise<ApplyEditResult> {
   if (!abs) return { ok: false, error: 'That path is outside the project folder.' }
   try {
     let checkpointHash: string | undefined
+    let checkpointFailed = false
     if (getConfig().checkpointsEnabled) {
       const rel = path.relative(getConfig().projectDir, abs)
       const cp = await checkpoint(`Before edit: ${rel}`)
       if (cp.ok) checkpointHash = cp.hash
+      // The safety net silently failing is exactly how a bad edit becomes
+      // unrecoverable — report it so the UI can warn the user.
+      else {
+        checkpointFailed = true
+        console.warn('[files] checkpoint failed before edit:', cp.error)
+      }
     }
     fs.mkdirSync(path.dirname(abs), { recursive: true })
     // Atomic write: a crash/disk-full mid-write must not leave a truncated
@@ -192,7 +199,7 @@ export async function applyEdit(edit: FileEdit): Promise<ApplyEditResult> {
     const tmp = `${abs}.tmp`
     fs.writeFileSync(tmp, edit.contents, 'utf-8')
     fs.renameSync(tmp, abs)
-    return { ok: true, path: abs, checkpoint: checkpointHash }
+    return { ok: true, path: abs, checkpoint: checkpointHash, checkpointFailed }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }

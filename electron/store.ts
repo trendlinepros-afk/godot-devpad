@@ -29,6 +29,7 @@ const defaults: DevPadConfig = {
   windowBounds: { width: 1200, height: 800 },
   eulaAcceptedVersion: '',
   trialState: '',
+  chatMessages: [],
 }
 
 export const store = new Store<DevPadConfig>({

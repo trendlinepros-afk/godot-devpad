@@ -481,8 +481,16 @@ function registerIpc(): void {
   )
   handle('godotInstall:openDownloadPage', () => openDownloadPage())
 
-  // AI
-  handle('ai:send', (_e, req: AiRequest) => route(req))
+  // AI — stream live activity back to the renderer so the user sees real
+  // progress instead of a static "Thinking…".
+  handle('ai:send', (e, req: AiRequest) => {
+    const requestId = req.requestId
+    const onProgress = requestId
+      ? (kind: 'status' | 'tool', text: string) =>
+          e.sender.send('ai:progress', { requestId, kind, text })
+      : undefined
+    return route(req, onProgress)
+  })
   handle('ai:test', (_e, provider: ProviderId) =>
     testProvider(provider, getConfig().apiKeys),
   )

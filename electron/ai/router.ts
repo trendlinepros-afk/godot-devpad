@@ -9,9 +9,11 @@ import {
   MissingKeyError,
   ProviderKeys,
   type ToolExecutor,
+  type ProgressFn,
 } from './providers'
 import { getBridgeStatus } from '../bridge-server'
 import { projectFileMap, resolveProjectPath, readFileText, listDir } from '../files'
+import { getLogs } from '../godot'
 
 export const MCP_PORT = 3727
 
@@ -83,6 +85,9 @@ You can READ the project yourself with tools — never ask the developer to past
 files or for permission to look at them:
 - Use the read_file tool to open any file (paths are in PROJECT FILES above), and
   list_files to browse a directory. Read what you need, then answer.
+- Use get_godot_errors to see the running game's current errors and warnings.
+  After you make changes that the developer runs, check it to confirm your fix
+  worked (or to find what still needs fixing) — don't edit blind.
 - Don't ask permission before each step; briefly say what you're doing and do it.
 - When changing a file, output the edit directly as a zirtola-edit block — the
   developer approves edits in the UI, so never ask "may I edit this?".
@@ -141,8 +146,10 @@ Rules:
 const SCENE_PROTOCOL_PROMPT = `
 
 --- EDITING SCENES ---
-The Godot editor is connected, so you can also change the OPEN scene safely. To
-do so, output a fenced block:
+The Godot editor is connected. For scene/node changes you MUST use this
+zirtola-scene protocol (the editor validates and applies it safely) rather than
+hand-editing .tscn text — editing .tscn directly while the editor is open can
+corrupt the scene or be overwritten. Output a fenced block:
 
 \`\`\`zirtola-scene
 { "scene": "res://levels/main.tscn", "ops": [
@@ -226,6 +233,18 @@ const execTool: ToolExecutor = async (name, args) => {
       .map((c) => (c.isDir ? `${c.name}/` : c.name))
       .join('\n')
   }
+  if (name === 'get_godot_errors') {
+    const problems = getLogs().filter((l) => l.level === 'error' || l.level === 'warn')
+    if (problems.length === 0) return 'No errors or warnings in the current game console.'
+    // Newest ~50 problems, with file:line when the parser captured it.
+    return problems
+      .slice(-50)
+      .map((l) => {
+        const loc = l.file ? ` [${l.file}${l.line ? `:${l.line}` : ''}]` : ''
+        return `${l.level.toUpperCase()}${loc}: ${l.text}`
+      })
+      .join('\n')
+  }
   return `Error: unknown tool "${name}".`
 }
 
@@ -252,7 +271,7 @@ function missingKeyResponse(err: MissingKeyError): AiResponse {
  *   • mcp profile  → every slot already resolves to mcp-claude, so all of the
  *                    above naturally flow through the MCP server.
  */
-export async function route(req: AiRequest): Promise<AiResponse> {
+export async function route(req: AiRequest, onProgress?: ProgressFn): Promise<AiResponse> {
   const profile = activeProfile()
   const sys = systemPrompt()
   const codeSys = codeSystemPrompt(req.mode ?? 'build')
@@ -264,6 +283,7 @@ export async function route(req: AiRequest): Promise<AiResponse> {
       const visionModel = profile.tasks.vision
       const v2cModel = profile.tasks.vision_to_code
 
+      onProgress?.('status', 'Looking at your screenshot…')
       // Step 1 — describe the screenshot.
       const description = await callProvider(
         {
@@ -299,6 +319,7 @@ export async function route(req: AiRequest): Promise<AiResponse> {
         k,
         MCP_PORT,
         execTool,
+        onProgress,
       )
 
       return {
@@ -317,6 +338,7 @@ export async function route(req: AiRequest): Promise<AiResponse> {
         k,
         MCP_PORT,
         execTool,
+        onProgress,
       )
       return { ok: true, text, modelId: model, modelLabel: modelLabel(model) }
     }
@@ -328,6 +350,7 @@ export async function route(req: AiRequest): Promise<AiResponse> {
       k,
       MCP_PORT,
       execTool,
+      onProgress,
     )
     return { ok: true, text, modelId: model, modelLabel: modelLabel(model) }
   } catch (err) {

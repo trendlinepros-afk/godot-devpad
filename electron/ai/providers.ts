@@ -169,6 +169,17 @@ export async function callProvider(
 
 export type ToolExecutor = (name: string, args: Record<string, unknown>) => Promise<string>
 
+/** Live activity callback so the UI can show what the AI is doing right now. */
+export type ProgressFn = (kind: 'status' | 'tool', text: string) => void
+
+/** Human-readable label for a tool invocation, shown live in the chat. */
+function toolLabel(name: string, args: Record<string, unknown>): string {
+  if (name === 'read_file') return `Reading ${String(args.path ?? 'a file')}`
+  if (name === 'list_files') return `Browsing ${String(args.dir ?? 'the project')}`
+  if (name === 'get_godot_errors') return 'Checking the game console for errors'
+  return `Running ${name}`
+}
+
 const MAX_TOOL_ITERS = 8
 const TOOL_RESULT_CAP = 40000
 
@@ -201,6 +212,15 @@ const OPENAI_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'get_godot_errors',
+      description:
+        'Get the current errors and warnings from the running Godot game console. Call this to see runtime errors so you can diagnose and fix them.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
 ]
 
 async function callOpenAiCompatibleAgentic(
@@ -208,6 +228,7 @@ async function callOpenAiCompatibleAgentic(
   apiKey: string,
   exec: ToolExecutor,
   baseURL?: string,
+  onProgress?: ProgressFn,
 ): Promise<string> {
   const client = new OpenAI({ apiKey, baseURL })
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = []
@@ -216,6 +237,7 @@ async function callOpenAiCompatibleAgentic(
   messages.push({ role: 'user', content: call.text })
 
   for (let i = 0; i < MAX_TOOL_ITERS; i++) {
+    onProgress?.('status', i === 0 ? 'Thinking…' : 'Working through your project…')
     const completion = await client.chat.completions.create({
       model: apiModelName(call.modelId),
       messages,
@@ -233,14 +255,17 @@ async function callOpenAiCompatibleAgentic(
         } catch {
           /* ignore malformed args */
         }
+        onProgress?.('tool', toolLabel(tc.function.name, args))
         const result = await exec(tc.function.name, args)
         messages.push({ role: 'tool', tool_call_id: tc.id, content: cap(result) })
       }
       continue
     }
+    onProgress?.('status', 'Writing response…')
     return msg.content ?? ''
   }
   // Hit the iteration cap — ask for a final answer with no more tools.
+  onProgress?.('status', 'Finishing up…')
   const final = await client.chat.completions.create({
     model: apiModelName(call.modelId),
     messages: [...messages, { role: 'user', content: 'Now give your final answer.' }],
@@ -253,6 +278,7 @@ async function callGeminiAgentic(
   call: ProviderCall,
   apiKey: string,
   exec: ToolExecutor,
+  onProgress?: ProgressFn,
 ): Promise<string> {
   const genai = new GoogleGenerativeAI(apiKey)
   const model = genai.getGenerativeModel({
@@ -273,6 +299,13 @@ async function callGeminiAgentic(
             // @ts-expect-error the SDK accepts string schema types at runtime
             parameters: { type: 'OBJECT', properties: { dir: { type: 'STRING' } } },
           },
+          {
+            name: 'get_godot_errors',
+            description:
+              'Get the current errors and warnings from the running Godot game console. Call this to see runtime errors so you can fix them.',
+            // @ts-expect-error the SDK accepts string schema types at runtime
+            parameters: { type: 'OBJECT', properties: {} },
+          },
         ],
       },
     ],
@@ -283,13 +316,18 @@ async function callGeminiAgentic(
     parts: [{ text: h.content }],
   }))
   const chat = model.startChat({ history })
+  onProgress?.('status', 'Thinking…')
   let result = await chat.sendMessage(call.text || '')
 
   for (let i = 0; i < MAX_TOOL_ITERS; i++) {
     const calls = result.response.functionCalls?.() ?? []
-    if (!calls || calls.length === 0) return result.response.text()
+    if (!calls || calls.length === 0) {
+      onProgress?.('status', 'Writing response…')
+      return result.response.text()
+    }
     const responses = []
     for (const fc of calls) {
+      onProgress?.('tool', toolLabel(fc.name, (fc.args as Record<string, unknown>) ?? {}))
       const out = await exec(fc.name, (fc.args as Record<string, unknown>) ?? {})
       responses.push({ functionResponse: { name: fc.name, response: { result: cap(out) } } })
     }
@@ -312,19 +350,20 @@ export async function callProviderAgentic(
   keys: ProviderKeys,
   mcpPort: number,
   exec: ToolExecutor,
+  onProgress?: ProgressFn,
 ): Promise<string> {
   const provider = providerFor(call.modelId)
   try {
     switch (provider) {
       case 'deepseek':
         if (!keys.deepseek) throw new MissingKeyError('deepseek')
-        return await callOpenAiCompatibleAgentic(call, keys.deepseek, exec, 'https://api.deepseek.com')
+        return await callOpenAiCompatibleAgentic(call, keys.deepseek, exec, 'https://api.deepseek.com', onProgress)
       case 'openai':
         if (!keys.openai) throw new MissingKeyError('openai')
-        return await callOpenAiCompatibleAgentic(call, keys.openai, exec)
+        return await callOpenAiCompatibleAgentic(call, keys.openai, exec, undefined, onProgress)
       case 'gemini':
         if (!keys.gemini) throw new MissingKeyError('gemini')
-        return await callGeminiAgentic(call, keys.gemini, exec)
+        return await callGeminiAgentic(call, keys.gemini, exec, onProgress)
       case 'mcp':
         return await callMcp(call, mcpPort)
       default:

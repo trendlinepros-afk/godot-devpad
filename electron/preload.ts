@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type {
   AiRequest,
+  AiProgressEvent,
   DevPadBridge,
   DevPadConfig,
   FileEdit,
@@ -76,6 +77,11 @@ const bridge: DevPadBridge = {
   ai: {
     send: (req: AiRequest) => ipcRenderer.invoke('ai:send', req),
     testConnection: (provider: ProviderId) => ipcRenderer.invoke('ai:test', provider),
+    onProgress: (cb) => {
+      const listener = (_e: unknown, ev: AiProgressEvent) => cb(ev)
+      ipcRenderer.on('ai:progress', listener)
+      return () => ipcRenderer.removeListener('ai:progress', listener)
+    },
   },
   files: {
     list: (dir: string) => ipcRenderer.invoke('files:list', dir),

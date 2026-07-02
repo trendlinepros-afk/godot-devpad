@@ -44,12 +44,47 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
   const [input, setInput] = useState('')
   const [screenshot, setScreenshot] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // Live activity line shown under the messages while busy ("Reading player.gd…").
+  const [activity, setActivity] = useState<string>('Thinking…')
   const [lastModel, setLastModel] = useState<string | null>(null)
   // Autonomy mode is global (toolbar): 'chat' read-only, 'ask' approve, 'auto' apply.
   const agentMode = config?.agentMode ?? 'ask'
   const counter = useRef(0)
   const feedRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  // Hydrate persisted chat once config loads (survives restart/update). Guarded
+  // so we only seed from disk while the in-memory transcript is still empty.
+  const hydrated = useRef(false)
+  useEffect(() => {
+    if (hydrated.current || !config) return
+    hydrated.current = true
+    const saved = config.chatMessages ?? []
+    if (saved.length) {
+      setMessages(saved as ChatMessage[])
+      counter.current = Math.max(0, ...saved.map((m) => m.id))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config])
+
+  // Persist the transcript (debounced), dropping screenshots so config stays
+  // small. Only runs after hydration so we never clobber saved history with [].
+  useEffect(() => {
+    if (!hydrated.current) return
+    const t = setTimeout(() => {
+      const trimmed = messages.slice(-100).map(({ screenshot: _s, ...m }) => m)
+      void update({ chatMessages: trimmed })
+    }, 800)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages])
+
+  // Subscribe to live AI progress and show it while busy.
+  useEffect(() => {
+    return window.devpad.ai.onProgress((e) => {
+      if (e.kind === 'status' || e.kind === 'tool') setActivity(e.text)
+    })
+  }, [])
 
   const activeProfile = config ? findProfile(config.profiles, config.activeProfileId) : undefined
 
@@ -122,6 +157,7 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
       const attached = screenshot
       setScreenshot(null)
       setBusy(true)
+      setActivity('Thinking…')
 
       try {
         const res = await routeMessage({
@@ -129,6 +165,7 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
           screenshot: attached,
           history,
           mode: override?.mode ?? (agentMode === 'chat' ? 'plan' : 'build'),
+          requestId: `req-${userMsg.id}`,
         })
 
         if (res.ok) {
@@ -256,6 +293,7 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
   const clearChat = () => {
     setMessages([])
     setLastModel(null)
+    void update({ chatMessages: [] })
   }
 
   return (
@@ -321,11 +359,11 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
         {busy && (
           <div className="flex items-center gap-2 text-sm text-slate-400">
             <span className="flex gap-1">
-              <span className="h-2 w-2 animate-bounce rounded-full bg-slate-500 [animation-delay:-0.3s]" />
-              <span className="h-2 w-2 animate-bounce rounded-full bg-slate-500 [animation-delay:-0.15s]" />
-              <span className="h-2 w-2 animate-bounce rounded-full bg-slate-500" />
+              <span className="h-2 w-2 animate-bounce rounded-full bg-accent [animation-delay:-0.3s]" />
+              <span className="h-2 w-2 animate-bounce rounded-full bg-accent [animation-delay:-0.15s]" />
+              <span className="h-2 w-2 animate-bounce rounded-full bg-accent" />
             </span>
-            Thinking…
+            <span className="text-slate-300">{activity}</span>
           </div>
         )}
       </div>

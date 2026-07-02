@@ -63,6 +63,27 @@ export function GodotConsole({ onShowChat }: Props) {
     toast('Sent the error to the AI chat', 'info')
   }
 
+  // Bundle every current error (and warning) and ask the AI to fix them all.
+  const fixAll = () => {
+    const errs = logs.filter((l) => l.level === 'error')
+    const list = (errs.length ? errs : problems)
+      .slice(-60)
+      .map((l) => {
+        const loc = l.file ? ` [${l.file}${l.line ? `:${l.line}` : ''}]` : ''
+        return `${l.level.toUpperCase()}${loc}: ${l.text}`
+      })
+      .join('\n')
+    chatBus.insert(
+      `My Godot game is producing these console errors when it runs:\n\n\`\`\`\n${list}\n\`\`\`\n\n` +
+        `Read the relevant project files, find the root cause of each, and fix them directly with edits. ` +
+        `Don't ask me to change anything in the editor — make the fixes yourself. ` +
+        `Use the get_godot_errors tool to confirm they're resolved after your changes.`,
+      { submit: true },
+    )
+    onShowChat()
+    toast('Asked the AI to fix all console errors', 'info')
+  }
+
   return (
     <div className="shrink-0 border-t border-panel-600 bg-panel-850">
       {/* Header bar */}
@@ -82,6 +103,15 @@ export function GodotConsole({ onShowChat }: Props) {
           <span className="rounded-full bg-red-600/80 px-1.5 py-0.5 text-[10px] font-semibold text-white">
             {errorCount} error{errorCount > 1 ? 's' : ''}
           </span>
+        )}
+        {problems.length > 0 && (
+          <button
+            onClick={fixAll}
+            title="Send all console errors to the AI to fix"
+            className="rounded bg-accent px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-accent-hover"
+          >
+            ⚡ Fix {errorCount > 0 ? `${errorCount} error${errorCount > 1 ? 's' : ''}` : 'problems'} with AI
+          </button>
         )}
         <div className="flex-1" />
         {!collapsed && (

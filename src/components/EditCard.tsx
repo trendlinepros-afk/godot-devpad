@@ -37,11 +37,23 @@ export function EditCard({ path, contents, autoApply = false }: Props) {
     }
   }, [path, contents])
 
+  const [noCheckpoint, setNoCheckpoint] = useState(false)
+
   const apply = async () => {
     const res = await window.devpad.files.applyEdit({ path, contents })
     if (res.ok) {
       setStatus('applied')
-      toast(`Applied ${path}${res.checkpoint ? ' (checkpoint saved)' : ''}`, 'success')
+      if (res.checkpointFailed) {
+        // The undo safety net could not be created — make this loud, because a
+        // bad edit here is unrecoverable via Zirtola.
+        setNoCheckpoint(true)
+        toast(
+          'Applied, but NO checkpoint could be saved (is Git installed?). This change can’t be auto-undone.',
+          'error',
+        )
+      } else {
+        toast(`Applied ${path}${res.checkpoint ? ' (checkpoint saved)' : ''}`, 'success')
+      }
     } else {
       setStatus('error')
       setError(res.error ?? 'Failed to apply edit')
@@ -134,8 +146,13 @@ export function EditCard({ path, contents, autoApply = false }: Props) {
       {/* Actions */}
       <div className="flex items-center gap-2 border-t border-panel-700 bg-panel-850 px-3 py-2">
         {status === 'applied' ? (
-          <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-400">
-            <CheckIcon width={14} height={14} /> Applied
+          <span className="flex items-center gap-1.5 text-xs font-medium">
+            <span className="flex items-center gap-1.5 text-emerald-400">
+              <CheckIcon width={14} height={14} /> Applied
+            </span>
+            {noCheckpoint && (
+              <span className="text-amber-300">⚠ no checkpoint — can’t auto-undo</span>
+            )}
           </span>
         ) : status === 'rejected' ? (
           <span className="text-xs text-slate-500">Rejected</span>

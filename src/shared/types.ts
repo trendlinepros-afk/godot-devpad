@@ -83,6 +83,22 @@ export interface AiRequest {
    * 'build' (default) = may emit zirtola-edit / zirtola-scene blocks.
    */
   mode?: ChatMode
+  /** Correlates streamed ai:progress events back to this request. */
+  requestId?: string
+}
+
+/**
+ * Live progress emitted while the AI works, so the UI shows real activity
+ * instead of a static "Thinking…".
+ *  - 'status' → a short human phase label ("Reading your project…")
+ *  - 'tool'   → the AI invoked a file tool (label = what it's doing)
+ *  - 'delta'  → a chunk of streamed assistant text (append to the bubble)
+ */
+export interface AiProgressEvent {
+  requestId: string
+  kind: 'status' | 'tool' | 'delta'
+  /** For 'delta': the text chunk. For 'status'/'tool': a display label. */
+  text: string
 }
 
 export interface AiResponse {
@@ -217,6 +233,12 @@ export interface ApplyEditResult {
   path?: string
   /** Hash of the safety checkpoint taken before the write, if any. */
   checkpoint?: string
+  /**
+   * True when checkpoints are enabled but the safety snapshot could NOT be
+   * created (e.g. git unavailable) — the edit still applied, but there's no
+   * undo point, so the UI must warn the user.
+   */
+  checkpointFailed?: boolean
   error?: string
 }
 
@@ -395,6 +417,19 @@ export interface DevPadConfig {
   eulaAcceptedVersion: string
   /** UX hint that a trial was used on this machine (server is source of truth). */
   trialState: '' | 'used'
+  /** Persisted chat transcript so conversations survive restart/update. */
+  chatMessages: PersistedChatMessage[]
+}
+
+/** A chat turn persisted to config (screenshots are dropped to keep it small). */
+export interface PersistedChatMessage {
+  id: number
+  role: 'user' | 'assistant'
+  content: string
+  modelLabel?: string
+  error?: boolean
+  needsSettings?: boolean
+  autoApply?: boolean
 }
 
 // ── Licensing ────────────────────────────────────────────────────────────────
@@ -519,6 +554,8 @@ export interface DevPadBridge {
   ai: {
     send(req: AiRequest): Promise<AiResponse>
     testConnection(provider: ProviderId): Promise<TestConnectionResult>
+    /** Live progress for the in-flight request (match on requestId). */
+    onProgress(cb: (e: AiProgressEvent) => void): () => void
   }
   files: {
     list(dir: string): Promise<FileNode | null>
