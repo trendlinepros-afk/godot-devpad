@@ -25,12 +25,20 @@ const IDENT: Record<string, string> = {
 }
 
 async function git(cwd: string, args: string[], env?: NodeJS.ProcessEnv): Promise<string> {
-  const { stdout } = await pexec('git', args, {
-    cwd,
-    env: env ?? process.env,
-    maxBuffer: 64 * 1024 * 1024,
-  })
-  return stdout.toString().trim()
+  try {
+    const { stdout } = await pexec('git', args, {
+      cwd,
+      env: env ?? process.env,
+      maxBuffer: 64 * 1024 * 1024,
+    })
+    return stdout.toString().trim()
+  } catch (err) {
+    // execFile puts git's stderr on err.stderr — surface it so checkpoint
+    // failures are diagnosable instead of an opaque "Command failed".
+    const e = err as { stderr?: Buffer | string; message?: string }
+    const detail = e.stderr ? String(e.stderr).trim() : (e.message ?? String(err))
+    throw new Error(detail)
+  }
 }
 
 function projectDir(): string {
@@ -63,12 +71,34 @@ export async function checkpoint(
   const dir = projectDir()
   if (!dir || !fs.existsSync(dir)) return { ok: false, error: 'No project folder set.' }
   const tmpIndex = path.join(os.tmpdir(), `zirtola-index-${Date.now()}-${process.pid}`)
+  const tmpExcludes = path.join(os.tmpdir(), `zirtola-excludes-${Date.now()}-${process.pid}`)
   try {
     await ensureRepo(dir)
     const env = { ...process.env, ...IDENT, GIT_INDEX_FILE: tmpIndex }
-    // Stage everything into the temp index, excluding Godot's heavy caches so
-    // snapshots stay fast even when the project has no .gitignore.
-    await git(dir, ['add', '-A', '--', '.', ':(exclude).godot', ':(exclude).import'], env)
+    // Exclude Godot's heavy caches via an excludes FILE (added to, never
+    // replacing, the user's .gitignore) rather than :(exclude) pathspecs —
+    // pathspecs combined with the "." positive spec make `git add` abort with
+    // "paths are ignored … use -f" when .godot is already gitignored.
+    fs.writeFileSync(tmpExcludes, '.godot/\n.import/\n')
+    // Stage the whole tree with NO explicit pathspec (so ignored paths are
+    // silently skipped, never fatal), and force line-ending conversion off so
+    // core.safecrlf can't turn a CRLF notice on binary model files into a
+    // hard error that kills the snapshot.
+    await git(
+      dir,
+      [
+        '-c',
+        'core.safecrlf=false',
+        '-c',
+        'core.autocrlf=false',
+        '-c',
+        `core.excludesFile=${tmpExcludes}`,
+        'add',
+        '-A',
+        '--ignore-errors',
+      ],
+      env,
+    )
     const tree = await git(dir, ['write-tree'], env)
     let parent: string | null = null
     try {
@@ -84,10 +114,12 @@ export async function checkpoint(
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
   } finally {
-    try {
-      fs.unlinkSync(tmpIndex)
-    } catch {
-      /* ignore */
+    for (const f of [tmpIndex, tmpExcludes]) {
+      try {
+        fs.unlinkSync(f)
+      } catch {
+        /* ignore */
+      }
     }
   }
 }
