@@ -314,9 +314,14 @@ function publicInfo(info: LicenseInfo): LicenseStatus['info'] {
   }
 }
 
+/** Server type values are case-varied (TRIAL / PERPETUAL / SUBSCRIPTION…). */
+function isTrialType(type: string | undefined): boolean {
+  return (type ?? '').toLowerCase() === 'trial'
+}
+
 /** Tier + trial countdown derived from a valid license payload. */
 function tierFields(info: LicenseInfo): { tier: Tier; trialDaysLeft?: number } {
-  if (info.type === 'trial') {
+  if (isTrialType(info.type)) {
     const msLeft = info.expiresAt ? Date.parse(info.expiresAt) - Date.now() : 0
     return {
       tier: 'trial',
@@ -410,7 +415,7 @@ function applyResult(result: ApiResult, keyUnderTest?: string): LicenseStatus {
       const cached = loadCache()
       // An EXPIRED TRIAL is the reverse-trial downgrade, not a lockout: land
       // on Free (cache kept for display; validate keeps answering 'expired').
-      if (result.code === 'expired' && cached?.type === 'trial' && !keyUnderTest) {
+      if (result.code === 'expired' && isTrialType(cached?.type) && !keyUnderTest) {
         return setStatus({
           ...freeStatus('Your Pro trial has ended — you are now on the Free plan.'),
           errorCode: result.code,
@@ -460,7 +465,7 @@ export async function revalidate(): Promise<LicenseStatus> {
   // features don't need validation). Paid licenses keep the strict behavior.
   if (
     (result.kind === 'network_error' || result.kind === 'server_error') &&
-    cached.type === 'trial'
+    isTrialType(cached.type)
   ) {
     return setStatus(
       freeStatus("Couldn't verify your trial — running on the Free plan until we can reconnect."),

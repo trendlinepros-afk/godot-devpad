@@ -62,11 +62,14 @@ Behavior:
 ## Subscriptions (paid Pro)
 
 - Paid keys are backed by Stripe subscriptions. `validate` returns the signed
-  payload while the subscription is active; once it lapses (after any grace
-  period you choose), `validate` returns `expired`. On chargeback/fraud use
-  `revoked`.
-- `type` for paid keys: anything other than `"trial"` (e.g. `"standard"`,
-  `"subscription"`); the app treats any valid non-trial license as Pro.
+  payload while the subscription is active; once it lapses, `validate` returns
+  `expired` after a **3-day grace window** (AGREED — keep returning the signed
+  valid payload during grace, pairing with Stripe's automatic payment
+  retries). On chargeback/fraud use `revoked`.
+- `type` values — CONFIRMED: paid licenses return `"PERPETUAL"` or
+  `"SUBSCRIPTION"` (uppercase). The desktop app matches the trial type
+  case-insensitively ("trial"/"TRIAL" both work) and treats any other
+  `valid:true` license as Pro.
 - Checkout and self-service management live at
   `https://www.zirtola.com/account` (the app already links there). Also
   create a public `https://www.zirtola.com/pricing` page — the app links to

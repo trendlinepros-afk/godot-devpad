@@ -664,7 +664,7 @@ function LicenseSection() {
       {info ? (
         <div className="mb-4 overflow-hidden rounded-md border border-panel-600">
           <Row label="Product" value={info.productName} />
-          <Row label="License type" value={info.type} />
+          <Row label="License type" value={friendlyLicenseType(info.type)} />
           <Row label="Key" value={info.key} mono />
           <Row
             label="Devices"
@@ -780,4 +780,18 @@ function Row({ label, value, mono }: { label: string; value: string; mono?: bool
       <span className={mono ? 'font-mono text-slate-300' : 'text-slate-300'}>{value}</span>
     </div>
   )
+}
+
+/** Server type values are case-varied (TRIAL / PERPETUAL / SUBSCRIPTION…). */
+function friendlyLicenseType(type: string): string {
+  switch (type.toLowerCase()) {
+    case 'trial':
+      return 'Trial'
+    case 'perpetual':
+      return 'Perpetual (one-time purchase)'
+    case 'subscription':
+      return 'Subscription'
+    default:
+      return type.charAt(0).toUpperCase() + type.slice(1).toLowerCase()
+  }
 }
