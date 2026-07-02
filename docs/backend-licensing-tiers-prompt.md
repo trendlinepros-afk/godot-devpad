@@ -100,3 +100,27 @@ Behavior:
    (`GET /api/licenses/public-key` unchanged).
 7. Provide a way to force-expire a specific trial (admin/manual is fine) so
    the desktop team can test the downgrade path without waiting 7 days.
+
+---
+
+## CONFIRMED (post-implementation, all acceptance tests passing)
+
+Verified against the live backend with real HTTP calls + Ed25519 signature
+verification (23 checks). Final facts the desktop app relies on:
+
+- Trial `type` string: `"trial"` (lowercase). App matches case-insensitively.
+- Trial: 7-day, signed, idempotent per machineId, implicit activation,
+  `maxActivations:1/seatsUsed:1`, zero paid-seat rows; expired trial →
+  `validate` = 4xx `expired`; repeat `POST /trial` = 403 `trial_already_used`.
+- Grace period: 3 days past `current_period_end` for Stripe-backed
+  subscriptions only (retried payment restores via invoice.paid). Fixed-term
+  keys get NO grace; deliberate cancellation expires immediately at period
+  end (subscription.deleted webhook).
+- Force-expire for testing: Admin panel → Licenses → "Free trials" →
+  "Force expire" (sets a `forceExpired` flag on the trial row).
+- `https://www.zirtola.com/pricing` live (Free trial / Subscription /
+  Lifetime); `/account` = Stripe billing portal.
+- No changes to activate/validate/deactivate shapes, signing key/scheme, or
+  existing error strings (regression-verified with signature checks).
+- Backend deploys on push via Railway (allow a couple of minutes after a
+  backend push before re-testing against production).
