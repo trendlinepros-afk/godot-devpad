@@ -7,6 +7,15 @@ import { useToast } from './Toast'
 import { chatBus } from '../state/chatBus'
 import { findProfile } from '../lib/profiles'
 import { parseSegments } from '../lib/edits'
+import {
+  PROJECT_MEMORY_ID,
+  PROJECT_MEMORY_TITLE,
+  SUMMARY_INTERVAL_MS,
+  buildSummaryPrompt,
+  buildTranscript,
+  findProjectMemory,
+} from '../lib/projectMemory'
+import { upsertNote } from '../lib/notes'
 import { EditCard } from './EditCard'
 import { SceneEditCard } from './SceneEditCard'
 import { PaperclipIcon, SendIcon, XIcon, TrashIcon } from './Icons'
@@ -160,6 +169,71 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
   const sendRef = useRef(send)
   sendRef.current = send
 
+  // ── Project Memory: AI-maintained summary note ─────────────────────────────
+  // Every SUMMARY_INTERVAL_MS of chat activity (and on demand) the conversation
+  // is distilled into the pinned "Project Summary" note, so brand-new chats
+  // start with full project context instead of re-reviewing everything.
+  const [summarizing, setSummarizing] = useState(false)
+  const summarizedCount = useRef(0) // messages already covered by the summary
+
+  const updateSummary = useCallback(
+    async (manual = false): Promise<void> => {
+      if (summarizing) return
+      const turns = messages
+        .filter((m) => !m.error)
+        .map((m) => ({ role: m.role, content: m.content }))
+      if (turns.length < 2) {
+        if (manual) toast('Chat a bit first — there is nothing to summarize yet.', 'info')
+        return
+      }
+      if (!manual && turns.length === summarizedCount.current) return // nothing new
+      setSummarizing(true)
+      try {
+        const existing = findProjectMemory(config?.notes ?? [])
+        const res = await routeMessage({
+          text: buildSummaryPrompt(existing?.content ?? '', buildTranscript(turns)),
+          history: [],
+          fileAnalysis: true,
+          mode: 'plan', // summarization must never emit edit blocks
+        })
+        if (!res.ok || !res.text.trim()) {
+          if (manual) toast(res.error ?? 'Could not update the summary.', 'error')
+          return
+        }
+        const now = Date.now()
+        const note = {
+          id: PROJECT_MEMORY_ID,
+          title: PROJECT_MEMORY_TITLE,
+          content: res.text.trim(),
+          pinnedToAi: true,
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
+        }
+        await update({ notes: upsertNote(config?.notes ?? [], note) })
+        summarizedCount.current = turns.length
+        toast('Project summary updated — see the Notes tab', 'success')
+      } finally {
+        setSummarizing(false)
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [messages, summarizing, config?.notes, update, toast],
+  )
+  const updateSummaryRef = useRef(updateSummary)
+  updateSummaryRef.current = updateSummary
+
+  const busyRef = useRef(busy)
+  busyRef.current = busy
+
+  // Interval-driven refresh — runs only when there's new conversation and the
+  // chat isn't mid-request (the refs always see the latest state).
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (!busyRef.current) void updateSummaryRef.current(false)
+    }, SUMMARY_INTERVAL_MS)
+    return () => clearInterval(t)
+  }, [])
+
   // Approve the plan: switch to Ask mode and tell the AI to implement it.
   // The mode is passed explicitly — `send`'s closure still sees the old
   // agentMode ('chat' → 'plan') until the config update re-renders, which
@@ -207,6 +281,19 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
               {lastModel}
             </span>
           )}
+          <button
+            onClick={() => updateSummary(true)}
+            disabled={summarizing || busy}
+            title="Summarize this conversation into the Project Summary note (auto-updates every 15 min)"
+            className="flex items-center gap-1 rounded-md border border-panel-600 bg-panel-700 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-panel-600 disabled:opacity-50"
+          >
+            {summarizing ? (
+              <span className="h-3 w-3 animate-spin rounded-full border border-panel-500 border-t-accent" />
+            ) : (
+              '🧠'
+            )}
+            {summarizing ? 'Summarizing…' : 'Update summary'}
+          </button>
           <button
             onClick={clearChat}
             title="Clear chat"

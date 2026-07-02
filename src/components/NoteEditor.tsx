@@ -4,6 +4,7 @@ import { useApp } from '../state/app'
 import { useToast } from './Toast'
 import { Markdown } from './Markdown'
 import { deleteNote, upsertNote, newNote } from '../lib/notes'
+import { isProjectMemory } from '../lib/projectMemory'
 import { TrashIcon, SparkleIcon, NoteIcon, PlusIcon } from './Icons'
 
 type ViewMode = 'write' | 'split' | 'preview'
@@ -185,6 +186,12 @@ export function NoteEditor({ noteId, onSelect }: Props) {
 
   return (
     <div className="flex h-full flex-col bg-panel-900">
+      {isProjectMemory(note) && (
+        <div className="flex items-center gap-2 border-b border-accent/30 bg-accent/10 px-3 py-1.5 text-[11px] text-accent-hover">
+          🧠 The AI keeps this summary updated from your chats (every ~15 min or via “Update
+          summary” in the chat). Manual edits here are folded into the next update.
+        </div>
+      )}
       {/* Header: title + actions */}
       <div className="flex shrink-0 items-center gap-2 border-b border-panel-600 px-3 py-2">
         <input

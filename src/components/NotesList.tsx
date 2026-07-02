@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useApp } from '../state/app'
 import { newNote, sortNotes, noteTitle, notePreview } from '../lib/notes'
+import { isProjectMemory } from '../lib/projectMemory'
 import { PlusIcon, SearchIcon, SparkleIcon } from './Icons'
 
 interface Props {
@@ -24,7 +25,12 @@ export function NotesList({ selectedId, onSelect }: Props) {
   const { config, update } = useApp()
   const [query, setQuery] = useState('')
 
-  const notes = useMemo(() => sortNotes(config?.notes ?? []), [config?.notes])
+  // The AI-maintained Project Summary always sits on top of the list.
+  const notes = useMemo(() => {
+    const sorted = sortNotes(config?.notes ?? [])
+    const memory = sorted.filter(isProjectMemory)
+    return [...memory, ...sorted.filter((n) => !isProjectMemory(n))]
+  }, [config?.notes])
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return notes
@@ -89,17 +95,30 @@ export function NotesList({ selectedId, onSelect }: Props) {
             key={n.id}
             onClick={() => onSelect(n.id)}
             className={`block w-full border-b border-panel-800 px-3 py-2 text-left ${
-              n.id === selectedId ? 'bg-panel-700' : 'hover:bg-panel-800'
-            }`}
+              n.id === selectedId
+                ? 'bg-panel-700'
+                : isProjectMemory(n)
+                  ? 'bg-accent/5 hover:bg-panel-800'
+                  : 'hover:bg-panel-800'
+            } ${isProjectMemory(n) ? 'border-l-2 border-l-accent' : ''}`}
           >
             <div className="flex items-center gap-1.5">
               {n.pinnedToAi && (
                 <SparkleIcon width={11} height={11} className="shrink-0 text-accent-hover" />
               )}
               <span className="flex-1 truncate text-sm text-slate-200">{noteTitle(n)}</span>
+              {isProjectMemory(n) && (
+                <span className="shrink-0 rounded-full bg-accent/15 px-1.5 py-px text-[9px] font-medium uppercase tracking-wide text-accent-hover">
+                  AI memory
+                </span>
+              )}
             </div>
             <div className="mt-0.5 flex items-center gap-2">
-              <span className="flex-1 truncate text-[11px] text-slate-500">{notePreview(n)}</span>
+              <span className="flex-1 truncate text-[11px] text-slate-500">
+                {isProjectMemory(n) && !n.content
+                  ? 'The AI keeps this note updated with a summary of your project.'
+                  : notePreview(n)}
+              </span>
               <span className="shrink-0 text-[10px] text-slate-600">{relativeTime(n.updatedAt)}</span>
             </div>
           </button>
