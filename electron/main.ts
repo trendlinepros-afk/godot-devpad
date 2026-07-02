@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, globalShortcut, dialog, screen } from 'electron'
+import { app, BrowserWindow, ipcMain, globalShortcut, dialog, screen, shell } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type {
@@ -63,6 +63,15 @@ import { loadVersions, checkForUpdates } from './versions'
 import { setMcpEnabled, startMcpServer, getMcpStatus } from './mcp-server'
 import { route } from './ai/router'
 import { testProvider } from './ai/providers'
+import {
+  initLicensing,
+  getLicenseStatus,
+  activate as activateLicense,
+  revalidate as revalidateLicense,
+  deactivate as deactivateLicense,
+  isLicensed,
+  ACCOUNT_URL,
+} from './licensing'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -310,12 +319,15 @@ function syncHotkeys(): void {
 }
 
 function registerHotkeys(): void {
+  // Hotkeys act directly in the main process, so each handler carries its own
+  // license check — the IPC guard doesn't cover them.
   const send = (action: 'run' | 'stop' | 'restart') => {
     mainWindow?.webContents.send('hotkey', action)
   }
   // F5 → Run, F6 → Stop, F7 → Restart. We perform the action AND notify the
   // renderer so the UI reflects the new state.
   globalShortcut.register('F5', () => {
+    if (!isLicensed()) return
     try {
       runGodot()
     } catch (err) {
@@ -327,10 +339,12 @@ function registerHotkeys(): void {
     send('run')
   })
   globalShortcut.register('F6', () => {
+    if (!isLicensed()) return
     stopGodot()
     send('stop')
   })
   globalShortcut.register('F7', () => {
+    if (!isLicensed()) return
     try {
       restartGodot()
     } catch (err) {
@@ -345,17 +359,45 @@ function registerHotkeys(): void {
 
 // ── IPC handlers ─────────────────────────────────────────────────────────────
 
+// License enforcement: every capability except licensing itself, config (EULA
+// acceptance, window prefs) and app self-update requires a validated license.
+// The renderer's LicenseGate blocks the UI too — this is the hard backstop.
+const LICENSE_EXEMPT_PREFIXES = ['license:', 'config:', 'updates:']
+
+function requiresLicense(channel: string): boolean {
+  return !LICENSE_EXEMPT_PREFIXES.some((p) => channel.startsWith(p))
+}
+
+function handle(
+  channel: string,
+  fn: (event: Electron.IpcMainInvokeEvent, ...args: never[]) => unknown,
+): void {
+  ipcMain.handle(channel, (event, ...args) => {
+    if (requiresLicense(channel) && !isLicensed()) {
+      throw new Error('A valid Zirtola license is required to use this feature.')
+    }
+    return fn(event, ...(args as never[]))
+  })
+}
+
 function registerIpc(): void {
+  // Licensing (always available — it's how the app becomes licensed)
+  handle('license:status', () => getLicenseStatus())
+  handle('license:activate', (_e, key: string) => activateLicense(String(key)))
+  handle('license:revalidate', () => revalidateLicense())
+  handle('license:deactivate', () => deactivateLicense())
+  handle('license:openAccount', () => shell.openExternal(ACCOUNT_URL))
+
   // Config
-  ipcMain.handle('config:getAll', () => getConfig())
-  ipcMain.handle('config:get', (_e, key: keyof DevPadConfig) => store.get(key))
-  ipcMain.handle('config:set', (_e, key: keyof DevPadConfig, value: unknown) => {
+  handle('config:getAll', () => getConfig())
+  handle('config:get', (_e, key: keyof DevPadConfig) => store.get(key))
+  handle('config:set', (_e, key: keyof DevPadConfig, value: unknown) => {
     setKey(key, value)
   })
-  ipcMain.handle('config:setMany', (_e, partial: Partial<DevPadConfig>) => setMany(partial))
+  handle('config:setMany', (_e, partial: Partial<DevPadConfig>) => setMany(partial))
 
   // Godot launcher
-  ipcMain.handle('godot:run', () => {
+  handle('godot:run', () => {
     try {
       return runGodot()
     } catch (err) {
@@ -365,8 +407,8 @@ function registerIpc(): void {
       }
     }
   })
-  ipcMain.handle('godot:stop', () => stopGodot())
-  ipcMain.handle('godot:restart', () => {
+  handle('godot:stop', () => stopGodot())
+  handle('godot:restart', () => {
     try {
       return restartGodot()
     } catch (err) {
@@ -376,47 +418,47 @@ function registerIpc(): void {
       }
     }
   })
-  ipcMain.handle('godot:status', () => getGodotStatus())
-  ipcMain.handle('godot:getLogs', () => getGodotLogs())
-  ipcMain.handle('godot:clearLogs', () => clearGodotLogs())
+  handle('godot:status', () => getGodotStatus())
+  handle('godot:getLogs', () => getGodotLogs())
+  handle('godot:clearLogs', () => clearGodotLogs())
 
   // Godot install assistant (detect / download / connect)
-  ipcMain.handle('godotInstall:detect', () => detectGodot())
-  ipcMain.handle('godotInstall:download', () =>
+  handle('godotInstall:detect', () => detectGodot())
+  handle('godotInstall:download', () =>
     downloadGodot((p) => mainWindow?.webContents.send('godotInstall:progress', p)),
   )
-  ipcMain.handle('godotInstall:openDownloadPage', () => openDownloadPage())
+  handle('godotInstall:openDownloadPage', () => openDownloadPage())
 
   // AI
-  ipcMain.handle('ai:send', (_e, req: AiRequest) => route(req))
-  ipcMain.handle('ai:test', (_e, provider: ProviderId) =>
+  handle('ai:send', (_e, req: AiRequest) => route(req))
+  handle('ai:test', (_e, provider: ProviderId) =>
     testProvider(provider, getConfig().apiKeys),
   )
 
   // Files
-  ipcMain.handle('files:list', (_e, dir: string) => listDir(dir))
-  ipcMain.handle('files:read', (_e, p: string) => readFileText(toReadablePath(p)))
-  ipcMain.handle('files:openExternal', (_e, p: string) => openExternal(p))
-  ipcMain.handle('files:applyEdit', (_e, edit) => applyEdit(edit))
+  handle('files:list', (_e, dir: string) => listDir(dir))
+  handle('files:read', (_e, p: string) => readFileText(toReadablePath(p)))
+  handle('files:openExternal', (_e, p: string) => openExternal(p))
+  handle('files:applyEdit', (_e, edit) => applyEdit(edit))
 
   // Git checkpoints (undo safety net for AI edits)
-  ipcMain.handle('git:state', async () => ({ repo: await isRepo() }))
-  ipcMain.handle('git:checkpoint', (_e, message: string) => checkpoint(message))
-  ipcMain.handle('git:list', () => listCheckpoints())
-  ipcMain.handle('git:restore', (_e, hash: string) => restoreCheckpoint(hash))
+  handle('git:state', async () => ({ repo: await isRepo() }))
+  handle('git:checkpoint', (_e, message: string) => checkpoint(message))
+  handle('git:list', () => listCheckpoints())
+  handle('git:restore', (_e, hash: string) => restoreCheckpoint(hash))
 
   // Capture
-  ipcMain.handle('capture:godot', () => captureGodotWindow())
+  handle('capture:godot', () => captureGodotWindow())
 
   // Dialogs
-  ipcMain.handle('dialog:pickFile', async (_e, opts?: { title?: string }) => {
+  handle('dialog:pickFile', async (_e, opts?: { title?: string }) => {
     const result = await dialog.showOpenDialog(mainWindow!, {
       title: opts?.title ?? 'Select a file',
       properties: ['openFile'],
     })
     return result.canceled ? null : (result.filePaths[0] ?? null)
   })
-  ipcMain.handle('dialog:pickFolder', async (_e, opts?: { title?: string }) => {
+  handle('dialog:pickFolder', async (_e, opts?: { title?: string }) => {
     const result = await dialog.showOpenDialog(mainWindow!, {
       title: opts?.title ?? 'Select a folder',
       properties: ['openDirectory'],
@@ -425,42 +467,42 @@ function registerIpc(): void {
   })
 
   // Asset generation
-  ipcMain.handle('assets:generate', (_e, req) => generateAsset(req))
-  ipcMain.handle('assets:save', (_e, base64: string, name: string) => saveAsset(base64, name))
+  handle('assets:generate', (_e, req) => generateAsset(req))
+  handle('assets:save', (_e, base64: string, name: string) => saveAsset(base64, name))
 
   // Godot editor bridge (addon)
-  ipcMain.handle('bridge:status', () => getBridgeStatus())
-  ipcMain.handle('bridge:installAddon', () => installAddon())
-  ipcMain.handle('bridge:request', (_e, method: string, params?: Record<string, unknown>) =>
+  handle('bridge:status', () => getBridgeStatus())
+  handle('bridge:installAddon', () => installAddon())
+  handle('bridge:request', (_e, method: string, params?: Record<string, unknown>) =>
     bridgeRequest(method, params),
   )
 
   // App self-update
-  ipcMain.handle('updates:status', () => getUpdateStatus())
-  ipcMain.handle('updates:check', () => checkAppUpdates())
-  ipcMain.handle('updates:download', () => downloadUpdate())
-  ipcMain.handle('updates:install', () => installUpdate())
+  handle('updates:status', () => getUpdateStatus())
+  handle('updates:check', () => checkAppUpdates())
+  handle('updates:download', () => downloadUpdate())
+  handle('updates:install', () => installUpdate())
 
   // Projects (new / validate)
-  ipcMain.handle('project:createNew', (_e, dir: string) => createNewProject(dir))
-  ipcMain.handle('project:validate', (_e, dir: string) => validateProject(dir))
+  handle('project:createNew', (_e, dir: string) => createNewProject(dir))
+  handle('project:validate', (_e, dir: string) => validateProject(dir))
 
   // MCP
-  ipcMain.handle('mcp:status', () => getMcpStatus())
-  ipcMain.handle('mcp:setEnabled', async (_e, value: boolean) => {
+  handle('mcp:status', () => getMcpStatus())
+  handle('mcp:setEnabled', async (_e, value: boolean) => {
     store.set('mcpEnabled', value)
     return setMcpEnabled(value)
   })
 
   // Versions
-  ipcMain.handle('versions:getAll', () => loadVersions())
-  ipcMain.handle('versions:check', async () => {
+  handle('versions:getAll', () => loadVersions())
+  handle('versions:check', async () => {
     const outcome = await checkForUpdates()
     return { updated: outcome.added.length > 0, added: outcome.added, file: outcome.file }
   })
 
   // Embedded Godot window (experimental, Windows)
-  ipcMain.handle('embed:setBounds', (_e, rect: EmbedRect) => {
+  handle('embed:setBounds', (_e, rect: EmbedRect) => {
     lastEmbedRect = rect
     // Both branches run off the UI thread; fire-and-forget (setBounds fires often).
     if (embedActive && embeddedHwnd != null) {
@@ -471,15 +513,15 @@ function registerIpc(): void {
       else void detachInput()
     } else void attemptEmbed()
   })
-  ipcMain.handle('embed:clear', () => clearEmbed())
-  ipcMain.handle('embed:status', () => {
+  handle('embed:clear', () => clearEmbed())
+  handle('embed:status', () => {
     const s = embedSupport()
     return { supported: s.supported, reason: s.reason, active: embedActive }
   })
 
   // Window / multi-monitor
-  ipcMain.handle('window:getDisplays', () => getDisplayInfos())
-  ipcMain.handle('window:setMonitor', (_e, position: MonitorPosition) => {
+  handle('window:getDisplays', () => getDisplayInfos())
+  handle('window:setMonitor', (_e, position: MonitorPosition) => {
     store.set('monitorPosition', position)
     if (mainWindow) applyMonitorPosition(mainWindow, position)
   })
@@ -487,26 +529,19 @@ function registerIpc(): void {
 
 // ── App lifecycle ────────────────────────────────────────────────────────────
 
-app.whenReady().then(async () => {
-  ensureDefaultProfiles()
-  registerIpc()
-  createWindow()
-  syncHotkeys()
-  app.on('browser-window-focus', syncHotkeys)
-  app.on('browser-window-blur', () => setTimeout(syncHotkeys, 50)) // let focus settle
+// Local servers (editor bridge, MCP) expose real capabilities, so they start
+// only once the license is validated — never for an unlicensed install.
+let servicesStarted = false
+function startLicensedServices(): void {
+  if (servicesStarted) return
+  servicesStarted = true
 
-  // Start the live editor bridge and forward its status/events to the renderer.
   setBridgeHandlers({
     onStatus: (s) => mainWindow?.webContents.send('bridge:status', s),
     onEvent: (e) => mainWindow?.webContents.send('bridge:event', e),
   })
   startBridgeServer()
 
-  // Wire app self-update events to the renderer, then do a silent startup check.
-  initUpdater((status) => mainWindow?.webContents.send('updates:status', status))
-  checkAppUpdates().catch(() => {})
-
-  // Start the MCP server automatically if enabled in settings.
   if (getConfig().mcpEnabled) {
     startMcpServer().catch((err) => console.error('[mcp] failed to start', err))
   }
@@ -520,6 +555,31 @@ app.whenReady().then(async () => {
       }
     })
     .catch(() => {})
+}
+
+app.whenReady().then(async () => {
+  ensureDefaultProfiles()
+  registerIpc()
+  createWindow()
+  syncHotkeys()
+  app.on('browser-window-focus', syncHotkeys)
+  app.on('browser-window-blur', () => setTimeout(syncHotkeys, 50)) // let focus settle
+
+  // Wire app self-update events to the renderer, then do a silent startup check.
+  // (Updates stay available pre-license so a broken build can always be fixed.)
+  initUpdater((status) => mainWindow?.webContents.send('updates:status', status))
+  checkAppUpdates().catch(() => {})
+
+  // Online license check — the renderer's LicenseGate mirrors this status and
+  // the IPC guard enforces it. Services start on the licensed transition.
+  initLicensing((status) => {
+    mainWindow?.webContents.send('license:status', status)
+    if (status.state === 'licensed') startLicensedServices()
+  })
+    .then((status) => {
+      if (status.state === 'licensed') startLicensedServices()
+    })
+    .catch((err) => console.error('[license] init failed:', err))
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

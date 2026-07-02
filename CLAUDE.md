@@ -37,3 +37,15 @@ Notes:
   `window.devpad` is kept as-is).
 - Working branch: `claude/devpad-godot-companion-ypwzgx`.
 - Verify before pushing: `npx tsc --noEmit` and `npm run build:renderer`.
+- **Licensing (since v0.1.16):** online license-key activation against
+  `https://www.zirtola.com/api/licenses/*` (activate/validate/deactivate).
+  Client code: `electron/licensing.ts` (machine fingerprint, Ed25519 signature
+  verification with the embedded PUBLIC key, AES-GCM-obfuscated cache in
+  userData/license.json). The app hard-blocks without a validated license —
+  renderer `LicenseGate`, an IPC guard in main (`handle()` wrapper; only
+  `license:`/`config:`/`updates:` channels are exempt), hotkey guards, and
+  bridge/MCP servers start only once licensed. No offline mode; revalidates
+  every 24h. 5xx/network failures show retryable "server unavailable" messaging,
+  never "invalid key". EULA: single source `build/eula.txt` (NSIS license page,
+  MSI LicenseAgreementDlg via `build/msi-eula.cjs` hook, in-app first-launch
+  acceptance keyed by `EULA_VERSION` in `src/lib/eula.ts`).

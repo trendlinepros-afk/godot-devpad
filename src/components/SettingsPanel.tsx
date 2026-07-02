@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { MonitorPosition, DisplayInfo, ProviderId } from '@shared/types'
+import type { MonitorPosition, DisplayInfo, LicenseStatus, ProviderId } from '@shared/types'
+import { EULA_TEXT, EULA_VERSION } from '../lib/eula'
 import { useApp } from '../state/app'
 import { useToast } from './Toast'
 import { detectVersionFromPath } from '../lib/godot-versions'
@@ -9,7 +10,7 @@ import { GodotSetup } from './GodotSetup'
 import { Modal } from './ModelProfileEditor'
 import { overlay } from '../state/overlay'
 
-type Section = 'ai' | 'godot' | 'mcp' | 'window' | 'versions' | 'updates'
+type Section = 'ai' | 'godot' | 'mcp' | 'window' | 'versions' | 'updates' | 'license'
 
 const SECTIONS: { key: Section; label: string }[] = [
   { key: 'ai', label: 'AI / Models' },
@@ -18,6 +19,7 @@ const SECTIONS: { key: Section; label: string }[] = [
   { key: 'window', label: 'Window' },
   { key: 'versions', label: 'Godot Versions' },
   { key: 'updates', label: 'App Updates' },
+  { key: 'license', label: 'License' },
 ]
 
 interface Props {
@@ -76,6 +78,7 @@ export function SettingsPanel({ onClose, onOpenProfiles }: Props) {
             {section === 'window' && <WindowSection />}
             {section === 'versions' && <VersionsSection />}
             {section === 'updates' && <UpdatesSection />}
+            {section === 'license' && <LicenseSection />}
           </div>
         </div>
       </div>
@@ -558,6 +561,125 @@ function VersionsSection() {
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+// ── License section ───────────────────────────────────────────────────────────
+
+function LicenseSection() {
+  const { toast } = useToast()
+  const [status, setStatus] = useState<LicenseStatus>({ state: 'checking' })
+  const [deactivating, setDeactivating] = useState(false)
+  const [confirming, setConfirming] = useState(false)
+  const [showEula, setShowEula] = useState(false)
+
+  useEffect(() => {
+    window.devpad.license.getStatus().then(setStatus)
+    return window.devpad.license.onStatus(setStatus)
+  }, [])
+
+  const deactivate = async () => {
+    setDeactivating(true)
+    try {
+      const result = await window.devpad.license.deactivate()
+      if (result.ok) {
+        toast('This device was deactivated.', 'success')
+      } else {
+        toast(result.error ?? 'Deactivation failed — please try again.', 'error')
+      }
+    } finally {
+      setDeactivating(false)
+      setConfirming(false)
+    }
+  }
+
+  const info = status.info
+
+  return (
+    <div>
+      <SectionTitle>License</SectionTitle>
+      {info ? (
+        <div className="mb-4 overflow-hidden rounded-md border border-panel-600">
+          <Row label="Product" value={info.productName} />
+          <Row label="License type" value={info.type} />
+          <Row label="Key" value={info.key} mono />
+          <Row
+            label="Devices"
+            value={`${info.seatsUsed} of ${info.maxActivations} activations used`}
+          />
+          <Row
+            label="Expires"
+            value={info.expiresAt ? new Date(info.expiresAt).toLocaleDateString() : 'Never'}
+          />
+        </div>
+      ) : (
+        <p className="mb-4 text-xs text-slate-500">
+          {status.state === 'checking'
+            ? 'Checking your license…'
+            : (status.message ?? 'No license is active on this device.')}
+        </p>
+      )}
+
+      <div className="flex flex-col gap-2">
+        <button
+          onClick={() => window.devpad.license.openAccount()}
+          className="w-fit rounded-md border border-panel-600 bg-panel-700 px-3 py-1.5 text-xs text-slate-200 hover:bg-panel-600"
+        >
+          Manage your license at zirtola.com
+        </button>
+        {info &&
+          (confirming ? (
+            <div className="flex items-center gap-2 rounded-md border border-amber-600/40 bg-amber-950/20 px-3 py-2 text-xs text-amber-200">
+              <span className="flex-1">
+                Deactivate this device? Zirtola will lock until a key is activated again.
+              </span>
+              <button
+                onClick={deactivate}
+                disabled={deactivating}
+                className="shrink-0 rounded-md bg-red-600 px-2.5 py-1 font-medium text-white hover:bg-red-500 disabled:opacity-60"
+              >
+                {deactivating ? 'Deactivating…' : 'Deactivate'}
+              </button>
+              <button
+                onClick={() => setConfirming(false)}
+                className="shrink-0 rounded-md border border-panel-600 px-2.5 py-1 text-slate-300 hover:bg-panel-700"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirming(true)}
+              className="w-fit rounded-md border border-panel-600 bg-panel-700 px-3 py-1.5 text-xs text-slate-200 hover:bg-panel-600"
+            >
+              Deactivate this device
+            </button>
+          ))}
+        <button
+          onClick={() => setShowEula((v) => !v)}
+          className="w-fit rounded-md border border-panel-600 bg-panel-700 px-3 py-1.5 text-xs text-slate-200 hover:bg-panel-600"
+        >
+          {showEula ? 'Hide License Agreement' : `View License Agreement (v${EULA_VERSION})`}
+        </button>
+      </div>
+
+      {showEula && (
+        <div className="mt-3 max-h-72 overflow-auto rounded-md border border-panel-600 bg-panel-800 p-3">
+          <pre className="whitespace-pre-wrap font-sans text-[11px] leading-relaxed text-slate-400">
+            {EULA_TEXT}
+          </pre>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="flex items-center justify-between border-b border-panel-600 bg-panel-800 px-3 py-2 text-xs last:border-b-0">
+      <span className="text-slate-500">{label}</span>
+      <span className={mono ? 'font-mono text-slate-300' : 'text-slate-300'}>{value}</span>
     </div>
   )
 }

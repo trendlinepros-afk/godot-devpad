@@ -1,0 +1,101 @@
+ZIRTOLA END-USER LICENSE AGREEMENT (EULA)
+Version 1.0 — Zirtola, The AI Video Game Editor
+
+IMPORTANT — READ CAREFULLY. This End-User License Agreement ("Agreement") is a
+legal agreement between you ("you" or "User") and Zirtola ("Zirtola", "we",
+"us") for the Zirtola software application, including all related components,
+media, documentation, and updates (the "Software"). By installing, copying, or
+otherwise using the Software you agree to be bound by this Agreement. If you do
+not agree, do not install or use the Software.
+
+1. LICENSE GRANT
+Subject to your compliance with this Agreement, Zirtola grants you a limited,
+non-exclusive, non-transferable, revocable license to install and use the
+Software for your own purposes, conditioned on (a) a valid license key
+purchased from Zirtola, and (b) ongoing online activation and validation of
+that key. The Software requires an internet connection to activate and to
+periodically re-validate your license; it will not operate without successful
+validation. Use is limited to the number of device activations included with
+your license.
+
+2. RESTRICTIONS
+You may NOT: (a) reverse engineer, decompile, disassemble, or otherwise attempt
+to derive the source code of the Software except to the extent such restriction
+is prohibited by applicable law; (b) redistribute, resell, rent, lease, lend,
+sublicense, or provide the Software to any third party; (c) share, publish, or
+transfer license keys, or circumvent or attempt to circumvent the license
+activation, validation, or device-limit mechanisms; (d) use the Software to
+develop a competing product; or (e) remove or alter any proprietary notices in
+the Software.
+
+3. OWNERSHIP
+The Software is LICENSED, NOT SOLD. Zirtola and its licensors retain all
+right, title, and interest in and to the Software, including all intellectual
+property rights. No rights are granted to you other than as expressly set out
+in this Agreement. Game projects, scripts, scenes, and assets you create with
+the Software remain yours.
+
+4. THIRD-PARTY SERVICES AND AI OUTPUT
+The Software can connect to third-party services (including AI model providers
+and the Godot engine) using credentials you supply. Your use of those services
+is governed by their own terms, and you are responsible for the costs and
+conduct of your accounts. AI-generated content may be inaccurate; you are
+solely responsible for reviewing changes the Software proposes or applies to
+your projects and system.
+
+5. "AS IS" — NO WARRANTY
+THE SOFTWARE IS PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT WARRANTIES OF ANY
+KIND, EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION ANY IMPLIED WARRANTIES
+OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND
+NON-INFRINGEMENT. ZIRTOLA DOES NOT WARRANT THAT THE SOFTWARE WILL BE
+UNINTERRUPTED, ERROR-FREE, OR SECURE, OR THAT DEFECTS WILL BE CORRECTED.
+
+6. ASSUMPTION OF RISK
+The Software can read, create, modify, and delete files; launch and terminate
+processes; modify project files and scenes; and interact with system components
+such as the file system, the Windows Installer cache, and the registry. YOU
+USE THE SOFTWARE AT YOUR OWN RISK. You are strongly advised to maintain
+current backups of your projects and system before and while using the
+Software.
+
+7. LIMITATION OF LIABILITY
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT SHALL ZIRTOLA OR
+ITS AFFILIATES, OWNERS, EMPLOYEES, AGENTS, OR SUPPLIERS BE LIABLE FOR ANY
+DIRECT, INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, OR PUNITIVE
+DAMAGES WHATSOEVER — INCLUDING WITHOUT LIMITATION DAMAGES FOR LOSS OR
+CORRUPTION OF DATA, SYSTEM DAMAGE, LOSS OF PROFITS, BUSINESS INTERRUPTION, OR
+LOSS OF GOODWILL — ARISING OUT OF OR RELATED TO THE SOFTWARE OR THIS AGREEMENT,
+EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES. ZIRTOLA'S TOTAL AGGREGATE
+LIABILITY UNDER THIS AGREEMENT SHALL NOT EXCEED THE AMOUNT YOU ACTUALLY PAID
+FOR THE LICENSE.
+
+8. INDEMNIFICATION
+You agree to defend, indemnify, and hold harmless Zirtola and its affiliates,
+owners, employees, and agents from and against any claims, damages, losses,
+liabilities, costs, and expenses (including reasonable attorneys' fees) arising
+out of or related to your use or misuse of the Software or your breach of this
+Agreement.
+
+9. TERMINATION
+This Agreement is effective until terminated. It terminates automatically,
+without notice, if you breach any term of this Agreement or if your license
+key is revoked or expires. Upon termination you must cease all use of the
+Software and uninstall it. Sections 3 and 5 through 8 survive termination.
+
+10. UPDATES
+Zirtola may provide updates that modify or replace the Software and may update
+these terms for new versions. Continued use of the Software after an update
+constitutes acceptance of the updated terms presented with that version.
+
+11. GOVERNING LAW / VENUE
+This Agreement shall be governed by the laws of the jurisdiction in which
+Zirtola is established, without regard to conflict-of-law principles. Venue
+and jurisdiction for any dispute shall lie in the courts of that jurisdiction.
+
+If any provision of this Agreement is held unenforceable, the remaining
+provisions remain in full force and effect. This Agreement is the entire
+agreement between you and Zirtola regarding the Software.
+
+By selecting "I accept the terms in the License Agreement" (in the installer)
+or "I accept" (in the application), you acknowledge that you have read,
+understood, and agree to be bound by this Agreement.

@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
+import type { LicenseStatus } from '@shared/types'
 import { AppProvider, useApp } from './state/app'
 import { TourProvider, useTour } from './state/tour'
 import { ToastProvider, useToast } from './components/Toast'
+import { LicenseGate } from './components/LicenseGate'
+import { EulaScreen } from './components/EulaScreen'
+import { EULA_VERSION } from './lib/eula'
 import { Toolbar } from './components/Toolbar'
 import { FileBrowser } from './components/FileBrowser'
 import { NotesList } from './components/NotesList'
@@ -34,6 +38,23 @@ function Root() {
     if (view === 'app') setEntered(true)
   }, [view])
 
+  // Online license state — mirrors the main process; the app renders only when
+  // 'licensed'. Starts as 'checking' to match the main process's initial state.
+  const [license, setLicense] = useState<LicenseStatus>({ state: 'checking' })
+  useEffect(() => {
+    let sawEvent = false
+    // Don't let the initial snapshot overwrite a status event that raced ahead.
+    window.devpad.license.getStatus().then((s) => {
+      if (!sawEvent) setLicense(s)
+    })
+    return window.devpad.license.onStatus((s) => {
+      sawEvent = true
+      setLicense(s)
+      // Successful activation carries the seat summary — surface it.
+      if (s.state === 'licensed' && s.message) toast(s.message, 'success')
+    })
+  }, [toast])
+
   // Subtle toast + refresh when version definitions are merged from remote.
   useEffect(() => {
     const off = window.devpad.events.onVersionsUpdated((added) => {
@@ -51,22 +72,32 @@ function Root() {
     )
   }
 
+  // EULA first: nothing (not even license activation) until the current terms
+  // are accepted. The installer shows the same text; this is in-app acceptance.
+  if (config.eulaAcceptedVersion !== EULA_VERSION) {
+    return <EulaScreen onAccepted={() => {}} />
+  }
+
+  // License gate: everything below (setup wizard included) requires a valid,
+  // online-validated license. The main process enforces this on IPC too.
   // First-launch wizard captures the executable, first project and API keys.
   // On completion we drop straight into the app with the chosen project; the
   // launcher (Start New / Open Recent) is shown on subsequent opens.
   if (!config.setupComplete && !wizardDone) {
     return (
-      <SetupWizard
-        onDone={() => {
-          setWizardDone(true)
-          setView('app')
-        }}
-      />
+      <LicenseGate status={license}>
+        <SetupWizard
+          onDone={() => {
+            setWizardDone(true)
+            setView('app')
+          }}
+        />
+      </LicenseGate>
     )
   }
 
   return (
-    <>
+    <LicenseGate status={license}>
       {view === 'launcher' && (
         <Launcher onEnter={() => setView('app')} onOpenSettings={() => setSettingsOpen(true)} />
       )}
@@ -88,7 +119,7 @@ function Root() {
         />
       )}
       {profilesOpen && <ModelProfileEditor onClose={() => setProfilesOpen(false)} />}
-    </>
+    </LicenseGate>
   )
 }
 

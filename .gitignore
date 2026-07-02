@@ -8,3 +8,4 @@ release/
 .env
 .env.local
 scripts/eval-results.json
+build/eula.rtf

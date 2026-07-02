@@ -391,6 +391,55 @@ export interface DevPadConfig {
   godotWindowMode: GodotWindowMode
   monitorPosition: MonitorPosition
   windowBounds?: { width: number; height: number; x?: number; y?: number }
+  /** EULA version the user accepted in-app ('' = not yet accepted). */
+  eulaAcceptedVersion: string
+}
+
+// ── Licensing ────────────────────────────────────────────────────────────────
+
+/** Full signed license payload returned by the zirtola.com licensing API. */
+export interface LicenseInfo {
+  valid: boolean
+  key: string
+  product: string
+  productName: string
+  type: string
+  expiresAt: string | null
+  maxActivations: number
+  seatsUsed: number
+  issuedAt: string
+  signature: string
+}
+
+export type LicenseState =
+  /** Talking to the licensing server. */
+  | 'checking'
+  /** Valid license verified online — app runs normally. */
+  | 'licensed'
+  /** No key on this machine (or key rejected) — show the activation form. */
+  | 'needs_key'
+  /** Revoked/expired — blocked with a link to manage the account. */
+  | 'blocked'
+  /** Network unreachable — retryable; the app never runs unlicensed. */
+  | 'offline'
+  /** Licensing server failure (5xx etc.) — retryable, NOT a bad key. */
+  | 'server_error'
+
+export interface LicenseStatus {
+  state: LicenseState
+  /** Sanitised license details for display (key is masked). */
+  info?: {
+    key: string
+    productName: string
+    type: string
+    expiresAt: string | null
+    maxActivations: number
+    seatsUsed: number
+  }
+  /** Human-readable status/error message for the UI. */
+  message?: string
+  /** Machine-readable error code when a license error occurred. */
+  errorCode?: string
 }
 
 export interface DisplayInfo {
@@ -408,6 +457,18 @@ export interface TestConnectionResult {
 // ── Preload bridge surface (window.devpad) ───────────────────────────────────
 
 export interface DevPadBridge {
+  license: {
+    getStatus(): Promise<LicenseStatus>
+    /** Activate a key on this machine. Resolves to the resulting status. */
+    activate(key: string): Promise<LicenseStatus>
+    /** Re-run the online validation (Retry buttons). */
+    revalidate(): Promise<LicenseStatus>
+    /** Release this device's seat. */
+    deactivate(): Promise<{ ok: boolean; seatsUsed?: number; error?: string }>
+    /** Open the zirtola.com account page in the default browser. */
+    openAccount(): Promise<void>
+    onStatus(cb: (s: LicenseStatus) => void): () => void
+  }
   config: {
     getAll(): Promise<DevPadConfig>
     get<K extends keyof DevPadConfig>(key: K): Promise<DevPadConfig[K]>

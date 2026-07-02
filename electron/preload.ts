@@ -13,6 +13,7 @@ import type {
   MonitorPosition,
   EmbedRect,
   EmbedStatus,
+  LicenseStatus,
   ProviderId,
   UpdateStatus,
 } from '@shared/types'
@@ -23,6 +24,18 @@ import type {
 // network/provider SDK (contextIsolation + nodeIntegration:false).
 
 const bridge: DevPadBridge = {
+  license: {
+    getStatus: () => ipcRenderer.invoke('license:status'),
+    activate: (key: string) => ipcRenderer.invoke('license:activate', key),
+    revalidate: () => ipcRenderer.invoke('license:revalidate'),
+    deactivate: () => ipcRenderer.invoke('license:deactivate'),
+    openAccount: () => ipcRenderer.invoke('license:openAccount'),
+    onStatus: (cb) => {
+      const listener = (_e: unknown, s: LicenseStatus) => cb(s)
+      ipcRenderer.on('license:status', listener)
+      return () => ipcRenderer.removeListener('license:status', listener)
+    },
+  },
   config: {
     getAll: () => ipcRenderer.invoke('config:getAll'),
     get: (key) => ipcRenderer.invoke('config:get', key),

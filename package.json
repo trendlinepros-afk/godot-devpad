@@ -1,6 +1,6 @@
 {
   "name": "zirtola",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "description": "Zirtola — The AI Video Game Editor. A local-first Godot game development companion with an integrated AI assistant.",
   "author": "Zirtola",
   "license": "MIT",
@@ -77,12 +77,23 @@
       }
     ],
     "win": {
-      "target": "nsis"
+      "target": ["nsis", "msi"],
+      "publisherName": "Zirtola"
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "license": "build/eula.txt"
     },
+    "msi": {
+      "oneClick": false,
+      "perMachine": true,
+      "runAfterFinish": true,
+      "createStartMenuShortcut": true,
+      "createDesktopShortcut": false,
+      "warningsAsErrors": false
+    },
+    "msiProjectCreated": "build/msi-eula.cjs",
     "mac": {
       "target": ["dmg", "zip"]
     }

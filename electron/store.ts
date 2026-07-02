@@ -27,6 +27,7 @@ const defaults: DevPadConfig = {
   godotWindowMode: 'separate',
   monitorPosition: 'auto',
   windowBounds: { width: 1200, height: 800 },
+  eulaAcceptedVersion: '',
 }
 
 export const store = new Store<DevPadConfig>({
