@@ -34,8 +34,8 @@ const REVALIDATE_INTERVAL_MS = 24 * 60 * 60 * 1000 // 24h for long-running apps
 
 let cachedMachineId: string | null = null
 
-/** Raw stable per-device identifier (never sent — hashed first). */
-function rawMachineIdentifier(): string {
+/** OS-level stable identifier, or null when unavailable (never sent raw). */
+function osMachineIdentifier(): string | null {
   try {
     if (process.platform === 'win32') {
       // Registry MachineGuid — survives reinstalls of the app, stable per OS install.
@@ -65,31 +65,46 @@ function rawMachineIdentifier(): string {
   } catch (err) {
     console.warn('[license] machine identifier lookup failed:', err)
   }
-  // Last resort: a generated id persisted next to the license cache so it stays
-  // stable across launches even when the OS identifiers are unreadable.
-  const fallbackPath = path.join(app.getPath('userData'), 'device-id')
-  try {
-    return fs.readFileSync(fallbackPath, 'utf-8').trim()
-  } catch {
-    const generated = crypto.randomUUID()
-    try {
-      fs.mkdirSync(path.dirname(fallbackPath), { recursive: true })
-      fs.writeFileSync(fallbackPath, generated, 'utf-8')
-    } catch {
-      /* keep in-memory value for this run */
-    }
-    return generated
-  }
+  return null
 }
 
-/** SHA-256 hex fingerprint sent to the licensing server. Stable across launches. */
+/**
+ * SHA-256 hex fingerprint sent to the licensing server. Stability is the whole
+ * game — a changed fingerprint reads as a new machine and burns a seat — so
+ * the computed hash is also persisted as a backup: if the OS lookup fails on a
+ * later launch (or the machine never had one), the persisted value keeps the
+ * fingerprint identical across launches, updates, and reinstalls.
+ */
 export function machineId(): string {
-  if (!cachedMachineId) {
-    cachedMachineId = crypto
-      .createHash('sha256')
-      .update(`zirtola-machine-v1:${rawMachineIdentifier()}`)
-      .digest('hex')
+  if (cachedMachineId) return cachedMachineId
+  const backupPath = path.join(app.getPath('userData'), 'device-id')
+  const readBackup = (): string | null => {
+    try {
+      const saved = fs.readFileSync(backupPath, 'utf-8').trim()
+      return /^[0-9a-f]{64}$/.test(saved) ? saved : null
+    } catch {
+      return null
+    }
   }
+
+  const osId = osMachineIdentifier()
+  let id: string
+  if (osId) {
+    id = crypto.createHash('sha256').update(`zirtola-machine-v1:${osId}`).digest('hex')
+  } else {
+    // OS identifier unavailable — reuse the persisted fingerprint if we have
+    // one, otherwise mint a random-but-persisted one.
+    id =
+      readBackup() ??
+      crypto.createHash('sha256').update(`zirtola-machine-v1:${crypto.randomUUID()}`).digest('hex')
+  }
+  try {
+    fs.mkdirSync(path.dirname(backupPath), { recursive: true })
+    if (readBackup() !== id) fs.writeFileSync(backupPath, id, 'utf-8')
+  } catch {
+    /* backup is best-effort; the in-memory value holds for this run */
+  }
+  cachedMachineId = id
   return cachedMachineId
 }
 
@@ -266,13 +281,29 @@ function licenseErrorMessage(code: string, payload: Record<string, unknown>): st
 let status: LicenseStatus = { state: 'checking' }
 let notify: ((s: LicenseStatus) => void) | null = null
 let revalidateTimer: NodeJS.Timeout | null = null
+// Bumped on every user-initiated transition (activate / revalidate /
+// deactivate). In-flight responses from an older generation are discarded so a
+// slow validate can't overwrite the outcome of a newer activate/deactivate.
+let generation = 0
+
+/** A signed 200 payload must actually carry the fields the app relies on. */
+function validPayloadShape(p: LicenseInfo): boolean {
+  return (
+    typeof p.key === 'string' &&
+    p.key.length > 0 &&
+    typeof p.productName === 'string' &&
+    typeof p.type === 'string' &&
+    typeof p.maxActivations === 'number' &&
+    typeof p.seatsUsed === 'number'
+  )
+}
 
 function publicInfo(info: LicenseInfo): LicenseStatus['info'] {
   return {
     key: info.key.length > 9 ? `${info.key.slice(0, 4)}…${info.key.slice(-5)}` : info.key,
     productName: info.productName,
     type: info.type,
-    expiresAt: info.expiresAt,
+    expiresAt: info.expiresAt ?? null,
     maxActivations: info.maxActivations,
     seatsUsed: info.seatsUsed,
   }
@@ -292,31 +323,57 @@ export function isLicensed(): boolean {
   return status.state === 'licensed'
 }
 
+/** ok-payload → verified LicenseInfo, or null when unverifiable/malformed. */
+function verifiedPayload(result: ApiResult): LicenseInfo | null {
+  if (result.kind !== 'ok') return null
+  const raw = result.payload as unknown as Record<string, unknown>
+  if (result.payload.valid !== true || !verifySignature(raw)) {
+    console.error('[license] response failed signature verification — rejecting')
+    return null
+  }
+  if (!validPayloadShape(result.payload)) {
+    console.error('[license] signed response is missing required fields — rejecting')
+    return null
+  }
+  return result.payload
+}
+
 function applyResult(result: ApiResult, keyUnderTest?: string): LicenseStatus {
   switch (result.kind) {
     case 'ok': {
-      if (result.payload.valid !== true || !verifySignature(result.payload as unknown as Record<string, unknown>)) {
-        console.error('[license] response failed signature verification — rejecting')
+      const payload = verifiedPayload(result)
+      if (!payload) {
         return setStatus({
           state: 'server_error',
           message:
             "The licensing server's response could not be verified. Please try again shortly or contact support.",
         })
       }
-      saveCache(result.payload)
-      return setStatus({ state: 'licensed', info: publicInfo(result.payload) })
+      saveCache(payload)
+      return setStatus({ state: 'licensed', info: publicInfo(payload) })
     }
     case 'license_error': {
       const message = licenseErrorMessage(result.code, result.payload)
-      if (result.code === 'not_activated' || result.code === 'invalid_key') {
+      if (
+        result.code === 'not_activated' ||
+        result.code === 'invalid_key' ||
+        result.code === 'activation_limit_reached' // key is fine, machine can't take a seat
+      ) {
         return setStatus({ state: 'needs_key', message, errorCode: result.code })
       }
-      if (result.code === 'activation_limit_reached') {
-        // The key itself is fine — this machine just can't take a seat.
+      if (result.code === 'missing_fields') {
+        // A protocol problem (client/server drift), not a bad license — treat
+        // as retryable and never touch the cached license over it.
+        return setStatus({ state: 'server_error', message })
+      }
+      // revoked / expired → blocked with account link. Only clear the cache
+      // when the failing key IS the cached license — a different key typed
+      // into the form must not nuke a working activation.
+      const cached = loadCache()
+      if (keyUnderTest && cached && cached.key !== keyUnderTest) {
         return setStatus({ state: 'needs_key', message, errorCode: result.code })
       }
-      // revoked / expired / anything terminal → blocked with account link.
-      if (keyUnderTest) clearCache()
+      clearCache()
       return setStatus({ state: 'blocked', message, errorCode: result.code })
     }
     case 'network_error':
@@ -328,12 +385,14 @@ function applyResult(result: ApiResult, keyUnderTest?: string): LicenseStatus {
 
 /** Validate the cached key online. Source of truth for whether the app runs. */
 export async function revalidate(): Promise<LicenseStatus> {
+  const gen = ++generation
   const cached = loadCache()
   if (!cached?.key) {
     return setStatus({ state: 'needs_key' })
   }
   setStatus({ state: 'checking' })
   const result = await callApi('validate', { key: cached.key, machineId: machineId() })
+  if (gen !== generation) return status // superseded by a newer activate/deactivate
   return applyResult(result)
 }
 
@@ -343,12 +402,14 @@ export async function activate(key: string): Promise<LicenseStatus> {
   if (!trimmed) {
     return setStatus({ state: 'needs_key', message: 'Enter your license key to continue.' })
   }
+  const gen = ++generation
   setStatus({ state: 'checking' })
   const result = await callApi('activate', {
     key: trimmed,
     machineId: machineId(),
     machineName: os.hostname(),
   })
+  if (gen !== generation) return status // superseded
   const next = applyResult(result, trimmed)
   if (next.state === 'licensed' && next.info) {
     // Surface remaining device slots on successful activation.
@@ -365,8 +426,17 @@ export async function activate(key: string): Promise<LicenseStatus> {
 export async function deactivate(): Promise<{ ok: boolean; seatsUsed?: number; error?: string }> {
   const cached = loadCache()
   if (!cached?.key) return { ok: false, error: 'No license is active on this device.' }
+  const gen = ++generation
   const result = await callApi('deactivate', { key: cached.key, machineId: machineId() })
-  if (result.kind === 'ok' || (result.kind === 'license_error' && result.code === 'not_activated')) {
+  if (gen !== generation) return { ok: false, error: 'Superseded by another license action.' }
+  // Success — or the server says this key/pairing no longer exists at all
+  // (not_activated / invalid_key / revoked / expired). In every one of those
+  // cases keeping the local activation would trap the user in a licensed state
+  // the server no longer recognises, so release locally too.
+  const serverSaysGone =
+    result.kind === 'license_error' &&
+    ['not_activated', 'invalid_key', 'revoked', 'expired'].includes(result.code)
+  if (result.kind === 'ok' || serverSaysGone) {
     clearCache()
     setStatus({ state: 'needs_key', message: 'This device was deactivated.' })
     const seats =
@@ -383,22 +453,61 @@ export async function deactivate(): Promise<{ ok: boolean; seatsUsed?: number; e
 }
 
 /**
+ * Daily background re-check for long-running apps. Applies only DEFINITIVE
+ * outcomes (verified ok / license errors). Anything transient — network,
+ * server failure, or an ok response that fails verification (captive portal,
+ * proxy interference, key rotation) — keeps the current state: a licensed
+ * session is never kicked over a transient problem.
+ */
+async function revalidateInBackground(): Promise<void> {
+  try {
+    const cached = loadCache()
+    if (!cached?.key) return
+    const gen = generation
+    const result = await callApi('validate', { key: cached.key, machineId: machineId() })
+    if (gen !== generation) return // a user action (deactivate/activate) won
+    if (result.kind === 'ok') {
+      const payload = verifiedPayload(result)
+      if (!payload) {
+        console.warn('[license] background revalidation response unverifiable; keeping state')
+        return
+      }
+      saveCache(payload)
+      setStatus({ state: 'licensed', info: publicInfo(payload) })
+    } else if (result.kind === 'license_error') {
+      applyResult(result)
+    } else {
+      console.warn('[license] periodic revalidation hit a transient failure; keeping current state')
+    }
+  } catch (err) {
+    console.warn('[license] background revalidation threw; keeping current state:', err)
+  }
+}
+
+/**
  * Start licensing: validate the cached key online (or ask for one), and keep
  * re-validating daily while the app runs. Mid-run transient network/server
  * failures do NOT lock a licensed app; definitive license errors do.
  */
 export async function initLicensing(onChange: (s: LicenseStatus) => void): Promise<LicenseStatus> {
   notify = onChange
-  const first = await revalidate()
+  let first: LicenseStatus
+  try {
+    first = await revalidate()
+  } catch (err) {
+    // Never leave the UI stranded on 'checking' — anything unexpected here is
+    // a retryable problem, not a bad key.
+    console.error('[license] initial validation threw:', err)
+    first = setStatus({ state: 'server_error', message: SERVER_ERROR_MESSAGE })
+  }
   if (revalidateTimer) clearInterval(revalidateTimer)
-  revalidateTimer = setInterval(async () => {
-    if (!loadCache()?.key) return
-    const result = await callApi('validate', { key: loadCache()!.key, machineId: machineId() })
-    if (result.kind === 'ok' || result.kind === 'license_error') {
-      applyResult(result)
-    } else {
-      console.warn('[license] periodic revalidation hit a transient failure; keeping current state')
-    }
-  }, REVALIDATE_INTERVAL_MS)
+  revalidateTimer = setInterval(() => void revalidateInBackground(), REVALIDATE_INTERVAL_MS)
   return first
+}
+
+/** Stop background revalidation (app quit). */
+export function stopLicensing(): void {
+  if (revalidateTimer) clearInterval(revalidateTimer)
+  revalidateTimer = null
+  notify = null
 }

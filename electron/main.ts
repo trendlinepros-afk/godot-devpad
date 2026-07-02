@@ -35,6 +35,7 @@ import {
 import { detectGodot, downloadGodot, openDownloadPage } from './godot-install'
 import {
   startBridgeServer,
+  stopBridgeServer,
   setBridgeHandlers,
   getBridgeStatus,
   bridgeRequest,
@@ -60,7 +61,7 @@ import {
   installUpdate,
 } from './updater'
 import { loadVersions, checkForUpdates } from './versions'
-import { setMcpEnabled, startMcpServer, getMcpStatus } from './mcp-server'
+import { setMcpEnabled, startMcpServer, stopMcpServer, getMcpStatus } from './mcp-server'
 import { route } from './ai/router'
 import { testProvider } from './ai/providers'
 import {
@@ -70,6 +71,7 @@ import {
   revalidate as revalidateLicense,
   deactivate as deactivateLicense,
   isLicensed,
+  stopLicensing,
   ACCOUNT_URL,
 } from './licensing'
 
@@ -311,7 +313,9 @@ let hotkeysActive = false
 
 function syncHotkeys(): void {
   const focused = BrowserWindow.getFocusedWindow() != null
-  const want = focused || getGodotStatus().state !== 'stopped'
+  // Never hold the keys unlicensed — the handlers would no-op while still
+  // swallowing F5/F6/F7 from every other app.
+  const want = isLicensed() && (focused || getGodotStatus().state !== 'stopped')
   if (want === hotkeysActive) return
   hotkeysActive = want
   if (want) registerHotkeys()
@@ -371,6 +375,11 @@ const LICENSE_EXEMPT_CHANNELS = new Set([
   'godot:status',
   'mcp:status',
   'bridge:status',
+  // Park/detach the embedded native window — pure cleanup, no capability.
+  // EmbedPane calls these while unmounting when a license drops mid-run;
+  // blocking them would leave the game window painted over the license gate.
+  'embed:setBounds',
+  'embed:clear',
 ])
 
 function requiresLicense(channel: string): boolean {
@@ -539,8 +548,9 @@ function registerIpc(): void {
 
 // ── App lifecycle ────────────────────────────────────────────────────────────
 
-// Local servers (editor bridge, MCP) expose real capabilities, so they start
-// only once the license is validated — never for an unlicensed install.
+// Local servers (editor bridge, MCP) expose real capabilities, so they run
+// only while the license is valid — never for an unlicensed install, and they
+// shut down again if the license is deactivated or revoked mid-session.
 let servicesStarted = false
 function startLicensedServices(): void {
   if (servicesStarted) return
@@ -567,6 +577,13 @@ function startLicensedServices(): void {
     .catch(() => {})
 }
 
+function stopLicensedServices(): void {
+  if (!servicesStarted) return
+  servicesStarted = false
+  stopBridgeServer()
+  stopMcpServer().catch(() => {})
+}
+
 app.whenReady().then(async () => {
   ensureDefaultProfiles()
   registerIpc()
@@ -581,14 +598,25 @@ app.whenReady().then(async () => {
   checkAppUpdates().catch(() => {})
 
   // Online license check — the renderer's LicenseGate mirrors this status and
-  // the IPC guard enforces it. Services start on the licensed transition.
+  // the IPC guard enforces it. Services run only while licensed; when the
+  // license drops mid-session (deactivated/revoked), everything winds down:
+  // servers stop, a running game is stopped, and the embed is detached so the
+  // native window can't sit on top of the license gate.
+  const onLicenseTransition = (state: string) => {
+    if (state === 'licensed') {
+      startLicensedServices()
+    } else if (servicesStarted) {
+      stopLicensedServices()
+      stopGodot()
+      clearEmbed()
+    }
+    syncHotkeys()
+  }
   initLicensing((status) => {
     mainWindow?.webContents.send('license:status', status)
-    if (status.state === 'licensed') startLicensedServices()
+    onLicenseTransition(status.state)
   })
-    .then((status) => {
-      if (status.state === 'licensed') startLicensedServices()
-    })
+    .then((status) => onLicenseTransition(status.state))
     .catch((err) => console.error('[license] init failed:', err))
 
   app.on('activate', () => {
@@ -602,5 +630,6 @@ app.on('window-all-closed', () => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
+  stopLicensing()
   stopGodot()
 })

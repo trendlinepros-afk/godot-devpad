@@ -39,19 +39,26 @@ exports.default = async function msiProjectCreated(projectFilePath) {
     `<WixVariable Id="WixUILicenseRtf" Value="${rtfPath}"/>\n      <UIRef Id="WixUI_InstallDir"/>`,
   )
 
-  // Route Welcome → License Agreement instead of skipping it…
+  // WixUI_InstallDir's own library ALREADY wires WelcomeDlg → LicenseAgreementDlg
+  // (and License's Back → Welcome), so re-declaring those publishes collides:
+  // WiX links ControlEvent symbols by (dialog, control, event, argument,
+  // condition) and errors with LGHT0091 on exact duplicates. Instead:
+  //
+  // 1. DELETE the template's Welcome → InstallScopeDlg override — with it gone,
+  //    the library's built-in Welcome → License Agreement publish takes effect.
   wxs = wxs.replace(
-    /<Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="InstallScopeDlg"([^>]*)>NOT Installed<\/Publish>/,
-    '<Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="LicenseAgreementDlg"$1>NOT Installed</Publish>',
+    /\s*<Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="InstallScopeDlg"[^>]*>NOT Installed<\/Publish>/,
+    '',
   )
-  // …make License Agreement's buttons go Back to Welcome / Next to InstallScope
-  // (Order 99 so these run after — and override — WixUI_InstallDir's defaults),
-  // and point Install Scope's Back at the License Agreement step.
+  // 2. Route License Agreement's Next to InstallScopeDlg. The library's own
+  //    publish targets InstallDirDlg — a different argument, so no duplicate —
+  //    and Order 99 makes ours run last and win.
+  // 3. Point Install Scope's Back at the License step (edit the template's own
+  //    publish in place; the library has no InstallScopeDlg symbols).
   wxs = wxs.replace(
     /<Publish Dialog="InstallScopeDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg"([^>]*)>1<\/Publish>/,
     [
-      '<Publish Dialog="LicenseAgreementDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg" Order="99">1</Publish>',
-      '        <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="InstallScopeDlg" Order="99">LicenseAccepted = "1"</Publish>',
+      '<Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="InstallScopeDlg" Order="99">LicenseAccepted = "1"</Publish>',
       '        <Publish Dialog="InstallScopeDlg" Control="Back" Event="NewDialog" Value="LicenseAgreementDlg"$1>1</Publish>',
     ].join('\n'),
   )

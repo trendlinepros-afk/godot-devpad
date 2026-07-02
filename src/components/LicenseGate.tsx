@@ -16,8 +16,24 @@ export function LicenseGate({
   status: LicenseStatus
   children: React.ReactNode
 }) {
-  if (status.state === 'licensed') return <>{children}</>
-  return <GateScreen status={status} />
+  const licensed = status.state === 'licensed'
+  // Once the app has been licensed this session, keep the app subtree MOUNTED
+  // (hidden) while the gate shows — deactivate → re-activate must not wipe the
+  // chat conversation and editor state. The main process independently stops
+  // Godot/servers on license loss, so nothing dangerous runs behind the gate.
+  const [everLicensed, setEverLicensed] = useState(false)
+  useEffect(() => {
+    if (licensed) setEverLicensed(true)
+  }, [licensed])
+
+  return (
+    <>
+      {(licensed || everLicensed) && (
+        <div className={licensed ? 'contents' : 'hidden'}>{children}</div>
+      )}
+      {!licensed && <GateScreen status={status} />}
+    </>
+  )
 }
 
 function GateScreen({ status }: { status: LicenseStatus }) {
@@ -30,6 +46,13 @@ function GateScreen({ status }: { status: LicenseStatus }) {
 
   useEffect(() => {
     if (status.state === 'needs_key') inputRef.current?.focus()
+  }, [status.state])
+
+  // The opt-in key form is per-state: when the machine state changes (offline,
+  // server error, back to blocked…) render that state's own screen — a sticky
+  // override would hide the Retry button behind the activation form.
+  useEffect(() => {
+    setShowKeyForm(false)
   }, [status.state])
 
   const activate = async () => {
