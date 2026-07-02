@@ -74,7 +74,8 @@ function projectContext(): string {
   ].join('\n')
 }
 
-// Keeps the assistant from peppering the user with permission questions.
+// Keeps the assistant from peppering the user with permission questions and
+// from delegating work back to them.
 const WORKFLOW_GUIDANCE = `
 
 --- HOW TO WORK ---
@@ -84,7 +85,13 @@ files or for permission to look at them:
   list_files to browse a directory. Read what you need, then answer.
 - Don't ask permission before each step; briefly say what you're doing and do it.
 - When changing a file, output the edit directly as a zirtola-edit block — the
-  developer approves edits in the UI, so never ask "may I edit this?".`
+  developer approves edits in the UI, so never ask "may I edit this?".
+- DO IT YOURSELF: never ask the developer to perform manual steps in the Godot
+  editor (adding nodes, editing scenes, changing settings) — you can make EVERY
+  project change yourself by editing files (scenes are .tscn text files,
+  project settings are project.godot). Many Zirtola users have never coded or
+  used Godot before; instructions like "open the scene and add a node" are a
+  product failure. The only thing you may ask the developer to do is press Run.`
 
 function systemPrompt(): string {
   const cfg = getConfig()
@@ -119,7 +126,9 @@ You can directly edit the developer's Godot project. When you want to CREATE or 
 \`\`\`
 
 Rules:
+- This works for EVERY file type in the project: scripts (.gd), scenes (.tscn), resources (.tres), shaders (.gdshader), project.godot — they are all text files you can create and modify. There is no file you "can't edit".
 - Put the ENTIRE file contents inside the block — never a partial snippet or a diff.
+- Before MODIFYING an existing file, read_file it first and base your edit on its actual current contents.
 - Use the res:// path relative to the project root (e.g. res://scripts/player.gd). Create new files the same way.
 - You may include multiple edit blocks in one reply; add a short explanation before each.
 - Only use a zirtola-edit block when you actually want to change a file on disk. For illustrative code the developer should NOT apply, use a normal \`\`\`gdscript block instead.
@@ -149,12 +158,50 @@ Rules:
 - Node paths are relative to the scene root ("." is the root).
 - Typed values use { "__type": "Vector2"|"Vector3"|"Color"|"NodePath", "values": [...] }.
 - The developer reviews and applies; the editor validates and saves the scene.
-- Use zirtola-edit (full file) for scripts and zirtola-scene for node structure.`
+- Use zirtola-edit (full file) for scripts and zirtola-scene for node structure.
+- zirtola-scene works on the OPEN scene; for any other scene, edit its .tscn
+  file directly with a zirtola-edit block (it's plain text). Never ask the
+  developer to add nodes by hand.`
+
+// When the editor bridge is NOT connected, scenes are edited as plain .tscn
+// text via zirtola-edit — the model must never conclude "I can't edit scenes"
+// and delegate node-adding to the user.
+const SCENE_FALLBACK_PROMPT = `
+
+--- EDITING SCENES (direct .tscn) ---
+The Godot editor bridge is not connected, so edit scenes by writing the .tscn
+file directly with a zirtola-edit block — .tscn is a plain text format and this
+is fully supported. NEVER ask the developer to open the editor and add nodes by
+hand.
+
+How to do it safely:
+1. ALWAYS read_file the existing .tscn first and preserve everything you don't
+   mean to change — especially the uid="uid://…" in the header and existing
+   ext_resource ids.
+2. Godot 4 scene structure:
+   [gd_scene load_steps=N format=3 uid="uid://…"]           ← header; load_steps = 1 + number of ext_resource + sub_resource entries
+   [ext_resource type="Script" path="res://player.gd" id="1_abc"]
+   [sub_resource type="BoxShape3D" id="BoxShape3D_1"]
+   size = Vector3(2, 1, 2)
+   [node name="Root" type="Node3D"]                          ← first node = scene root (no parent)
+   [node name="Player" type="CharacterBody3D" parent="."]    ← parent="." means child of root
+   script = ExtResource("1_abc")
+   [node name="Mesh" type="MeshInstance3D" parent="Player"]  ← deeper paths use parent="Player/Mesh" style
+   mesh = SubResource("BoxShape3D_1")
+3. Adding a node = adding a [node …] section in tree order (parents before
+   children). Attaching a script = ext_resource + script = ExtResource(id) on
+   the node. Node properties go as key = value lines under the [node] header
+   (Vector2(x, y), Vector3(x, y, z), Color(r, g, b, a), true/false, strings quoted).
+4. Keep load_steps correct after adding/removing resources.
+5. For a NEW scene file, the same format applies; pick any unused uid or omit
+   the uid attribute entirely.
+The developer reviews the diff like any other edit, and a checkpoint is saved
+before it's applied — so make the change yourself rather than describing it.`
 
 /** System prompt for code-capable tasks, varying by mode. */
 function codeSystemPrompt(mode: 'plan' | 'build'): string {
   if (mode === 'plan') return `${systemPrompt()}${PLAN_PROMPT}`
-  const sceneProtocol = getBridgeStatus().connected ? SCENE_PROTOCOL_PROMPT : ''
+  const sceneProtocol = getBridgeStatus().connected ? SCENE_PROTOCOL_PROMPT : SCENE_FALLBACK_PROMPT
   return `${systemPrompt()}${EDIT_PROTOCOL_PROMPT}${sceneProtocol}`
 }
 
