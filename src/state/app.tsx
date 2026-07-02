@@ -86,7 +86,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true
     ;(async () => {
-      const [cfg, vers, status, mcp, upd, bridge] = await Promise.all([
+      // allSettled, not all: config is the only call the shell truly needs to
+      // render. If any other call fails (e.g. rejected pre-license), keep its
+      // default and boot anyway — a rejection here must never hang "Loading…".
+      const [cfg, vers, status, mcp, upd, bridge] = await Promise.allSettled([
         window.devpad.config.getAll(),
         window.devpad.versions.getAll(),
         window.devpad.godot.status(),
@@ -95,12 +98,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         window.devpad.bridge.getStatus(),
       ])
       if (!mounted) return
-      setConfig(cfg)
-      setVersions(vers)
-      setGodotStatus(status)
-      setMcpStatus(mcp)
-      setUpdateStatus(upd)
-      setBridgeStatus(bridge)
+      if (cfg.status === 'fulfilled') setConfig(cfg.value)
+      if (vers.status === 'fulfilled') setVersions(vers.value)
+      if (status.status === 'fulfilled') setGodotStatus(status.value)
+      if (mcp.status === 'fulfilled') setMcpStatus(mcp.value)
+      if (upd.status === 'fulfilled') setUpdateStatus(upd.value)
+      if (bridge.status === 'fulfilled') setBridgeStatus(bridge.value)
       setReady(true)
     })()
 

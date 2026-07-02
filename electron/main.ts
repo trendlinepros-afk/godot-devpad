@@ -363,8 +363,18 @@ function registerHotkeys(): void {
 // acceptance, window prefs) and app self-update requires a validated license.
 // The renderer's LicenseGate blocks the UI too — this is the hard backstop.
 const LICENSE_EXEMPT_PREFIXES = ['license:', 'config:', 'updates:']
+// Read-only status lookups the app shell needs to BOOT (AppProvider fetches
+// them before the license gate can even render). They expose no capability —
+// blocking them would hang startup on "Loading…" with no way to activate.
+const LICENSE_EXEMPT_CHANNELS = new Set([
+  'versions:getAll',
+  'godot:status',
+  'mcp:status',
+  'bridge:status',
+])
 
 function requiresLicense(channel: string): boolean {
+  if (LICENSE_EXEMPT_CHANNELS.has(channel)) return false
   return !LICENSE_EXEMPT_PREFIXES.some((p) => channel.startsWith(p))
 }
 
