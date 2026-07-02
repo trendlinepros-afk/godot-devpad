@@ -4,7 +4,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { app } from 'electron'
-import type { LicenseInfo, LicenseStatus } from '@shared/types'
+import type { LicenseInfo, LicenseStatus, Tier } from '@shared/types'
+import { store } from './store'
 
 // Online license activation for Zirtola. The licensing backend lives at
 // zirtola.com; this module owns the machine fingerprint, the HTTP client, the
@@ -20,6 +21,7 @@ import type { LicenseInfo, LicenseStatus } from '@shared/types'
 
 const API_BASE = 'https://www.zirtola.com/api/licenses'
 export const ACCOUNT_URL = 'https://www.zirtola.com/account'
+export const PRICING_URL = 'https://www.zirtola.com/pricing'
 
 // Ed25519 PUBLIC key for verifying the "signature" field of license responses.
 // Public by design — safe to ship. The private key never leaves the server.
@@ -200,6 +202,7 @@ const LICENSE_ERROR_CODES = new Set([
   'activation_limit_reached',
   'not_activated',
   'missing_fields',
+  'trial_already_used',
 ])
 
 type ApiResult =
@@ -271,6 +274,8 @@ function licenseErrorMessage(code: string, payload: Record<string, unknown>): st
     }
     case 'not_activated':
       return 'This device is not activated yet — enter your license key to activate it.'
+    case 'trial_already_used':
+      return 'Your free trial on this device has ended. Continue on the Free plan or upgrade to Pro.'
     default:
       return 'The license request was missing required information. Please try again.'
   }
@@ -309,6 +314,28 @@ function publicInfo(info: LicenseInfo): LicenseStatus['info'] {
   }
 }
 
+/** Tier + trial countdown derived from a valid license payload. */
+function tierFields(info: LicenseInfo): { tier: Tier; trialDaysLeft?: number } {
+  if (info.type === 'trial') {
+    const msLeft = info.expiresAt ? Date.parse(info.expiresAt) - Date.now() : 0
+    return {
+      tier: 'trial',
+      trialDaysLeft: Math.max(0, Math.ceil(msLeft / 86_400_000)),
+    }
+  }
+  return { tier: 'pro' }
+}
+
+/** The full licensed status for a verified payload (trial or pro). */
+function licensedStatus(payload: LicenseInfo): LicenseStatus {
+  return { state: 'licensed', ...tierFields(payload), info: publicInfo(payload) }
+}
+
+/** Free-tier status (app runs, Pro features locked). */
+function freeStatus(message?: string): LicenseStatus {
+  return { state: 'free', tier: 'free', message }
+}
+
 function setStatus(next: LicenseStatus): LicenseStatus {
   status = next
   notify?.(status)
@@ -321,6 +348,16 @@ export function getLicenseStatus(): LicenseStatus {
 
 export function isLicensed(): boolean {
   return status.state === 'licensed'
+}
+
+/**
+ * Current access tier, or null while the app is still gated (checking /
+ * needs_key / blocked / offline / server_error). The IPC guard keys off this.
+ */
+export function getTier(): Tier | null {
+  if (status.state === 'licensed') return status.tier ?? 'pro'
+  if (status.state === 'free') return 'free'
+  return null
 }
 
 /** ok-payload → verified LicenseInfo, or null when unverifiable/malformed. */
@@ -350,7 +387,7 @@ function applyResult(result: ApiResult, keyUnderTest?: string): LicenseStatus {
         })
       }
       saveCache(payload)
-      return setStatus({ state: 'licensed', info: publicInfo(payload) })
+      return setStatus(licensedStatus(payload))
     }
     case 'license_error': {
       const message = licenseErrorMessage(result.code, result.payload)
@@ -366,10 +403,22 @@ function applyResult(result: ApiResult, keyUnderTest?: string): LicenseStatus {
         // as retryable and never touch the cached license over it.
         return setStatus({ state: 'server_error', message })
       }
-      // revoked / expired → blocked with account link. Only clear the cache
-      // when the failing key IS the cached license — a different key typed
-      // into the form must not nuke a working activation.
+      // One trial per machine — an ended trial lands on the Free tier.
+      if (result.code === 'trial_already_used') {
+        return setStatus({ ...freeStatus(message), errorCode: result.code })
+      }
       const cached = loadCache()
+      // An EXPIRED TRIAL is the reverse-trial downgrade, not a lockout: land
+      // on Free (cache kept for display; validate keeps answering 'expired').
+      if (result.code === 'expired' && cached?.type === 'trial' && !keyUnderTest) {
+        return setStatus({
+          ...freeStatus('Your Pro trial has ended — you are now on the Free plan.'),
+          errorCode: result.code,
+        })
+      }
+      // revoked / paid-expired → blocked with account link. Only clear the
+      // cache when the failing key IS the cached license — a different key
+      // typed into the form must not nuke a working activation.
       if (keyUnderTest && cached && cached.key !== keyUnderTest) {
         return setStatus({ state: 'needs_key', message, errorCode: result.code })
       }
@@ -388,11 +437,35 @@ export async function revalidate(): Promise<LicenseStatus> {
   const gen = ++generation
   const cached = loadCache()
   if (!cached?.key) {
+    // No local license. If a trial was ever used here, ask the server (the
+    // trial endpoint is idempotent): an active trial is recovered, an ended
+    // one lands on Free — either way the user isn't shown the welcome screen
+    // again on every launch.
+    if (store.get('trialState') === 'used') {
+      setStatus({ state: 'checking' })
+      const result = await callApi('trial', { machineId: machineId(), machineName: os.hostname() })
+      if (gen !== generation) return status
+      if (result.kind === 'network_error' || result.kind === 'server_error') {
+        // Free needs no validation — degrade gracefully instead of blocking.
+        return setStatus(freeStatus())
+      }
+      return applyResult(result)
+    }
     return setStatus({ state: 'needs_key' })
   }
   setStatus({ state: 'checking' })
   const result = await callApi('validate', { key: cached.key, machineId: machineId() })
   if (gen !== generation) return status // superseded by a newer activate/deactivate
+  // A trial user with no connectivity degrades to Free (low stakes — free
+  // features don't need validation). Paid licenses keep the strict behavior.
+  if (
+    (result.kind === 'network_error' || result.kind === 'server_error') &&
+    cached.type === 'trial'
+  ) {
+    return setStatus(
+      freeStatus("Couldn't verify your trial — running on the Free plan until we can reconnect."),
+    )
+  }
   return applyResult(result)
 }
 
@@ -420,6 +493,40 @@ export async function activate(key: string): Promise<LicenseStatus> {
     })
   }
   return next
+}
+
+/**
+ * One-click 7-day Pro trial for this machine — no key, no card. The server is
+ * idempotent per machineId (repeat calls return the same trial; an ended trial
+ * returns trial_already_used, which lands on the Free tier).
+ */
+export async function startTrial(): Promise<LicenseStatus> {
+  const gen = ++generation
+  setStatus({ state: 'checking' })
+  const result = await callApi('trial', {
+    machineId: machineId(),
+    machineName: os.hostname(),
+  })
+  if (gen !== generation) return status // superseded
+  const next = applyResult(result)
+  if (next.state === 'licensed' && next.tier === 'trial') {
+    store.set('trialState', 'used')
+    return setStatus({
+      ...next,
+      message: `Pro trial active — everything is unlocked for ${next.trialDaysLeft ?? 7} days. No card needed.`,
+    })
+  }
+  if (next.errorCode === 'trial_already_used') store.set('trialState', 'used')
+  return next
+}
+
+/**
+ * Continue on the limited Free tier (post-trial, or as a fallback from the
+ * blocked screen). Local transition — no network, nothing to validate.
+ */
+export function continueFree(): LicenseStatus {
+  ++generation // cancel any in-flight validate/activate so it can't override
+  return setStatus(freeStatus())
 }
 
 /** Release this machine's seat and return to the activation screen. */

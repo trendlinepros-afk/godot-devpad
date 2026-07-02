@@ -8,6 +8,7 @@ import { modelLabel } from '../lib/models'
 import { CheckpointsModal } from './CheckpointsModal'
 import { AssetStudio } from './AssetStudio'
 import { WikiModal } from './WikiModal'
+import { UpgradeModal } from './UpgradeModal'
 import {
   PlayIcon,
   StopIcon,
@@ -27,7 +28,7 @@ interface ToolbarProps {
 }
 
 export function Toolbar({ onHome, onOpenSettings, onOpenProfiles }: ToolbarProps) {
-  const { config, godotStatus, update, setGodotStatus } = useApp()
+  const { config, godotStatus, update, setGodotStatus, license, tier } = useApp()
   const { toast } = useToast()
   const tour = useTour()
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
@@ -35,6 +36,8 @@ export function Toolbar({ onHome, onOpenSettings, onOpenProfiles }: ToolbarProps
   const [historyOpen, setHistoryOpen] = useState(false)
   const [assetsOpen, setAssetsOpen] = useState(false)
   const [wikiOpen, setWikiOpen] = useState(false)
+  // Locked Pro feature name to pitch, '' = generic pitch, null = closed.
+  const [upgradeFeature, setUpgradeFeature] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const helpRef = useRef<HTMLDivElement>(null)
 
@@ -171,8 +174,15 @@ export function Toolbar({ onHome, onOpenSettings, onOpenProfiles }: ToolbarProps
         ).map(([value, label, tip]) => (
           <button
             key={value}
-            onClick={() => update({ agentMode: value })}
-            title={tip}
+            onClick={() => {
+              // Auto mode is Pro — Free users get the upgrade pitch instead.
+              if (value === 'auto' && tier === 'free') {
+                setUpgradeFeature('Auto mode')
+                return
+              }
+              update({ agentMode: value })
+            }}
+            title={value === 'auto' && tier === 'free' ? 'Auto mode is a Pro feature' : tip}
             className={`px-2.5 py-1 text-xs ${
               config?.agentMode === value
                 ? value === 'auto'
@@ -183,10 +193,34 @@ export function Toolbar({ onHome, onOpenSettings, onOpenProfiles }: ToolbarProps
                 : 'bg-panel-700 text-slate-300 hover:bg-panel-600'
             }`}
           >
-            {label}
+            {value === 'auto' && tier === 'free' ? `${label} 🔒` : label}
           </button>
         ))}
       </div>
+
+      {/* Tier badge: trial countdown (urgency) or Free upsell; nothing on Pro */}
+      {tier === 'trial' && (
+        <button
+          onClick={() => window.devpad.license.openPricing()}
+          title="You're on the full Pro trial — click to see plans"
+          className={`ml-2 rounded-full border px-2.5 py-0.5 text-xs font-medium ${
+            (license.trialDaysLeft ?? 7) <= 2
+              ? 'border-amber-600/60 bg-amber-950/40 text-amber-200 hover:bg-amber-900/40'
+              : 'border-accent/50 bg-accent/15 text-accent-hover hover:bg-accent/25'
+          }`}
+        >
+          Pro trial — {license.trialDaysLeft ?? '?'} day{(license.trialDaysLeft ?? 0) === 1 ? '' : 's'} left
+        </button>
+      )}
+      {tier === 'free' && (
+        <button
+          onClick={() => setUpgradeFeature('')}
+          title="You're on the Free plan — click to see what Pro unlocks"
+          className="ml-2 rounded-full border border-panel-600 bg-panel-800 px-2.5 py-0.5 text-xs text-slate-400 hover:text-slate-200"
+        >
+          Free plan
+        </button>
+      )}
 
       {/* Current model indicator (which model the active profile uses for chat) */}
       {activeProfile && (
@@ -249,7 +283,7 @@ export function Toolbar({ onHome, onOpenSettings, onOpenProfiles }: ToolbarProps
 
       {/* Asset Studio */}
       <button
-        onClick={() => setAssetsOpen(true)}
+        onClick={() => (tier === 'free' ? setUpgradeFeature('Asset Studio') : setAssetsOpen(true))}
         title="Asset Studio (generate sprites & art)"
         data-tour="assets"
         className="grid h-8 w-8 place-items-center rounded-md border border-panel-600 bg-panel-700 text-slate-300 hover:bg-panel-600"
@@ -313,6 +347,12 @@ export function Toolbar({ onHome, onOpenSettings, onOpenProfiles }: ToolbarProps
       {historyOpen && <CheckpointsModal onClose={() => setHistoryOpen(false)} />}
       {assetsOpen && (
         <AssetStudio onClose={() => setAssetsOpen(false)} onOpenSettings={onOpenSettings} />
+      )}
+      {upgradeFeature !== null && (
+        <UpgradeModal
+          feature={upgradeFeature || undefined}
+          onClose={() => setUpgradeFeature(null)}
+        />
       )}
       {wikiOpen && (
         <WikiModal

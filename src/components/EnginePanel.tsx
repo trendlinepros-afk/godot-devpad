@@ -21,7 +21,7 @@ interface Props {
 }
 
 export function EnginePanel({ onShowChat }: Props) {
-  const { bridgeStatus } = useApp()
+  const { bridgeStatus, tier } = useApp()
   const { toast } = useToast()
   const [tree, setTree] = useState<SceneNode | null>(null)
   const [treeLoaded, setTreeLoaded] = useState(false)
@@ -123,7 +123,20 @@ export function EnginePanel({ onShowChat }: Props) {
         )}
       </div>
 
-      {!connected ? (
+      {tier === 'free' ? (
+        <div className="space-y-3 p-3 text-sm">
+          <p className="text-xs leading-relaxed text-slate-400">
+            🔒 The live editor bridge (scene tree, in-editor screenshots, AI scene editing) is a
+            Zirtola Pro feature.
+          </p>
+          <button
+            onClick={() => window.devpad.license.openPricing()}
+            className="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-white hover:bg-accent-hover"
+          >
+            See Pro plans
+          </button>
+        </div>
+      ) : !connected ? (
         <div className="space-y-3 p-3 text-sm">
           <p className="text-xs leading-relaxed text-slate-400">
             The Zirtola Bridge addon links this panel to the Godot editor for the live scene tree,

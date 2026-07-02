@@ -27,9 +27,12 @@ const bridge: DevPadBridge = {
   license: {
     getStatus: () => ipcRenderer.invoke('license:status'),
     activate: (key: string) => ipcRenderer.invoke('license:activate', key),
+    startTrial: () => ipcRenderer.invoke('license:startTrial'),
+    continueFree: () => ipcRenderer.invoke('license:continueFree'),
     revalidate: () => ipcRenderer.invoke('license:revalidate'),
     deactivate: () => ipcRenderer.invoke('license:deactivate'),
     openAccount: () => ipcRenderer.invoke('license:openAccount'),
+    openPricing: () => ipcRenderer.invoke('license:openPricing'),
     onStatus: (cb) => {
       const listener = (_e: unknown, s: LicenseStatus) => cb(s)
       ipcRenderer.on('license:status', listener)

@@ -393,6 +393,8 @@ export interface DevPadConfig {
   windowBounds?: { width: number; height: number; x?: number; y?: number }
   /** EULA version the user accepted in-app ('' = not yet accepted). */
   eulaAcceptedVersion: string
+  /** UX hint that a trial was used on this machine (server is source of truth). */
+  trialState: '' | 'used'
 }
 
 // ── Licensing ────────────────────────────────────────────────────────────────
@@ -414,19 +416,33 @@ export interface LicenseInfo {
 export type LicenseState =
   /** Talking to the licensing server. */
   | 'checking'
-  /** Valid license verified online — app runs normally. */
+  /** Valid license verified online — app runs with full (trial/pro) access. */
   | 'licensed'
-  /** No key on this machine (or key rejected) — show the activation form. */
+  /** No key/trial on this machine — show the welcome/activation screen. */
   | 'needs_key'
-  /** Revoked/expired — blocked with a link to manage the account. */
+  /** Revoked / paid-license expired — blocked with account link + free fallback. */
   | 'blocked'
-  /** Network unreachable — retryable; the app never runs unlicensed. */
+  /** Network unreachable — retryable. */
   | 'offline'
   /** Licensing server failure (5xx etc.) — retryable, NOT a bad key. */
   | 'server_error'
+  /** Free tier: app runs with core features; Pro features locked. */
+  | 'free'
+
+/**
+ * Access tier:
+ *  - 'trial' — full Pro access on a 7-day trial license
+ *  - 'pro'   — any valid non-trial license (one-time key or subscription)
+ *  - 'free'  — post-trial (or opted-in) limited tier; BYOK AI + core features
+ */
+export type Tier = 'trial' | 'pro' | 'free'
 
 export interface LicenseStatus {
   state: LicenseState
+  /** Access tier when the app is allowed to run (licensed/free states). */
+  tier?: Tier
+  /** Whole days until the trial ends (0 = ends today). Trial tier only. */
+  trialDaysLeft?: number
   /** Sanitised license details for display (key is masked). */
   info?: {
     key: string
@@ -461,12 +477,18 @@ export interface DevPadBridge {
     getStatus(): Promise<LicenseStatus>
     /** Activate a key on this machine. Resolves to the resulting status. */
     activate(key: string): Promise<LicenseStatus>
+    /** One-click 7-day Pro trial for this machine (no key, no card). */
+    startTrial(): Promise<LicenseStatus>
+    /** Continue on the limited Free tier (post-trial / blocked fallback). */
+    continueFree(): Promise<LicenseStatus>
     /** Re-run the online validation (Retry buttons). */
     revalidate(): Promise<LicenseStatus>
     /** Release this device's seat. */
     deactivate(): Promise<{ ok: boolean; seatsUsed?: number; error?: string }>
     /** Open the zirtola.com account page in the default browser. */
     openAccount(): Promise<void>
+    /** Open the public pricing page in the default browser. */
+    openPricing(): Promise<void>
     onStatus(cb: (s: LicenseStatus) => void): () => void
   }
   config: {

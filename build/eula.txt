@@ -1,5 +1,5 @@
 ZIRTOLA END-USER LICENSE AGREEMENT (EULA)
-Version 1.0 — Zirtola, The AI Video Game Editor
+Version 1.1 — Zirtola, The AI Video Game Editor
 
 IMPORTANT — READ CAREFULLY. This End-User License Agreement ("Agreement") is a
 legal agreement between you ("you" or "User") and Zirtola ("Zirtola", "we",
@@ -11,12 +11,19 @@ not agree, do not install or use the Software.
 1. LICENSE GRANT
 Subject to your compliance with this Agreement, Zirtola grants you a limited,
 non-exclusive, non-transferable, revocable license to install and use the
-Software for your own purposes, conditioned on (a) a valid license key
-purchased from Zirtola, and (b) ongoing online activation and validation of
-that key. The Software requires an internet connection to activate and to
-periodically re-validate your license; it will not operate without successful
-validation. Use is limited to the number of device activations included with
-your license.
+Software for your own purposes, under one of the following plans:
+  (a) TRIAL — a one-time, time-limited evaluation of the full feature set on a
+      single device, requiring online activation and validation;
+  (b) FREE — a reduced feature set that may be used after (or instead of) a
+      trial, with certain features reserved for paid plans; or
+  (c) PAID (PRO) — the full feature set, conditioned on a valid license key or
+      active subscription purchased from Zirtola and ongoing online activation
+      and validation of that key.
+Trial and paid plans require an internet connection to activate and to
+periodically re-validate; those plans will not operate without successful
+validation. Zirtola may change which features belong to which plan for future
+versions. Paid use is limited to the number of device activations included
+with your license.
 
 2. RESTRICTIONS
 You may NOT: (a) reverse engineer, decompile, disassemble, or otherwise attempt

@@ -18,7 +18,7 @@ interface Props {
 const OFFSCREEN = { x: -20000, y: -20000, width: 400, height: 300 }
 
 export function EmbedPane({ active, onOpenSettings }: Props) {
-  const { config, godotStatus } = useApp()
+  const { config, godotStatus, tier } = useApp()
   const ref = useRef<HTMLDivElement>(null)
   const mode = config?.godotWindowMode ?? 'separate'
   const [status, setStatus] = useState<EmbedStatus>({ supported: false, active: false })
@@ -85,7 +85,15 @@ export function EmbedPane({ active, onOpenSettings }: Props) {
 
   // Overlay messaging (shown behind / around the native window).
   let message: React.ReactNode = null
-  if (mode !== 'embedded') {
+  if (tier === 'free') {
+    message = (
+      <Message
+        title="The embedded game window is a Pro feature"
+        body="On the Free plan your game opens in its own window. Start a free trial or upgrade to dock it here."
+        action={{ label: 'See Pro plans', onClick: () => window.devpad.license.openPricing() }}
+      />
+    )
+  } else if (mode !== 'embedded') {
     message = (
       <Message
         title="Embedded mode is off"

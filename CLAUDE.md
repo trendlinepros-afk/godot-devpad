@@ -49,3 +49,12 @@ Notes:
   never "invalid key". EULA: single source `build/eula.txt` (NSIS license page,
   MSI LicenseAgreementDlg via `build/msi-eula.cjs` hook, in-app first-launch
   acceptance keyed by `EULA_VERSION` in `src/lib/eula.ts`).
+- **Tiers (since v0.1.19):** reverse trial — one-click 7-day full-Pro trial via
+  `POST /api/licenses/trial` (idempotent per machineId; `trial_already_used`
+  after expiry), then auto-downgrade to a FREE tier (BYOK AI + core features;
+  app runs, no lockout). Pro = paid key/subscription. Pro-only: embedded game
+  window, Asset Studio, scene bridge, MCP server, Auto agent mode
+  (PRO_CHANNELS in main.ts + renderer lock touchpoints + UpgradeModal). Tier
+  exposed via `getTier()` (main) and `useApp().tier` (renderer). Backend
+  contract for the zirtola.com agent: `docs/backend-licensing-tiers-prompt.md`.
+  EULA v1.1 covers trial/free plans.

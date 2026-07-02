@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import type { LicenseStatus } from '@shared/types'
 import { AppProvider, useApp } from './state/app'
 import { TourProvider, useTour } from './state/tour'
 import { ToastProvider, useToast } from './components/Toast'
@@ -24,7 +23,7 @@ type MainView = 'chat' | 'note' | 'game'
 type View = 'launcher' | 'app'
 
 function Root() {
-  const { ready, config, refreshVersions } = useApp()
+  const { ready, config, refreshVersions, license } = useApp()
   const { toast } = useToast()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [profilesOpen, setProfilesOpen] = useState(false)
@@ -38,22 +37,12 @@ function Root() {
     if (view === 'app') setEntered(true)
   }, [view])
 
-  // Online license state — mirrors the main process; the app renders only when
-  // 'licensed'. Starts as 'checking' to match the main process's initial state.
-  const [license, setLicense] = useState<LicenseStatus>({ state: 'checking' })
+  // License state lives in AppProvider (shared with toolbar/chat/settings).
+  // Surface activation/trial confirmations as toasts here.
   useEffect(() => {
-    let sawEvent = false
-    // Don't let the initial snapshot overwrite a status event that raced ahead.
-    window.devpad.license.getStatus().then((s) => {
-      if (!sawEvent) setLicense(s)
-    })
-    return window.devpad.license.onStatus((s) => {
-      sawEvent = true
-      setLicense(s)
-      // Successful activation carries the seat summary — surface it.
-      if (s.state === 'licensed' && s.message) toast(s.message, 'success')
-    })
-  }, [toast])
+    if (license.state === 'licensed' && license.message) toast(license.message, 'success')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [license])
 
   // Subtle toast + refresh when version definitions are merged from remote.
   useEffect(() => {

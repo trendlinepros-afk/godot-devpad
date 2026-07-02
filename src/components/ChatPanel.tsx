@@ -29,7 +29,7 @@ interface ChatPanelProps {
 }
 
 export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
-  const { config, update } = useApp()
+  const { config, update, tier } = useApp()
   const { toast } = useToast()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
@@ -131,7 +131,8 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
               role: 'assistant',
               content: res.text,
               modelLabel: res.modelLabel,
-              autoApply: agentMode === 'auto',
+              // Auto mode is a Pro feature — Free tier always reviews edits.
+              autoApply: agentMode === 'auto' && tier !== 'free',
             },
           ])
         } else {
@@ -152,7 +153,7 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
       }
       return true
     },
-    [input, screenshot, busy, messages, agentMode],
+    [input, screenshot, busy, messages, agentMode, tier],
   )
 
   // Keep a ref to the latest send so the chatBus listener can submit.

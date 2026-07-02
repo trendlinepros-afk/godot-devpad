@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { MonitorPosition, DisplayInfo, LicenseStatus, ProviderId } from '@shared/types'
+import type { MonitorPosition, DisplayInfo, ProviderId } from '@shared/types'
 import { EULA_TEXT, EULA_VERSION } from '../lib/eula'
 import { useApp } from '../state/app'
 import { useToast } from './Toast'
@@ -346,9 +346,27 @@ function GodotSection() {
 // ── MCP Server ────────────────────────────────────────────────────────────────
 
 function McpSection() {
-  const { mcpStatus, refreshMcp } = useApp()
+  const { mcpStatus, refreshMcp, tier } = useApp()
   const { toast } = useToast()
   const [busy, setBusy] = useState(false)
+
+  if (tier === 'free') {
+    return (
+      <div>
+        <SectionTitle>MCP Server</SectionTitle>
+        <p className="mb-3 text-xs leading-relaxed text-slate-500">
+          🔒 The MCP server (lets external AI tools like Claude Code control Zirtola) is a Pro
+          feature.
+        </p>
+        <button
+          onClick={() => window.devpad.license.openPricing()}
+          className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover"
+        >
+          See Pro plans
+        </button>
+      </div>
+    )
+  }
 
   const toggle = async () => {
     setBusy(true)
@@ -569,15 +587,38 @@ function VersionsSection() {
 
 function LicenseSection() {
   const { toast } = useToast()
-  const [status, setStatus] = useState<LicenseStatus>({ state: 'checking' })
+  const { license: status, tier, config } = useApp()
   const [deactivating, setDeactivating] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const [showEula, setShowEula] = useState(false)
+  const [key, setKey] = useState('')
+  const [activating, setActivating] = useState(false)
+  const [startingTrial, setStartingTrial] = useState(false)
 
-  useEffect(() => {
-    window.devpad.license.getStatus().then(setStatus)
-    return window.devpad.license.onStatus(setStatus)
-  }, [])
+  const activate = async () => {
+    if (!key.trim() || activating) return
+    setActivating(true)
+    try {
+      const next = await window.devpad.license.activate(key.trim())
+      if (next.state !== 'licensed') {
+        toast(next.message ?? 'Activation failed', 'error')
+      } else {
+        setKey('')
+      }
+    } finally {
+      setActivating(false)
+    }
+  }
+
+  const startTrial = async () => {
+    setStartingTrial(true)
+    try {
+      const next = await window.devpad.license.startTrial()
+      if (next.state !== 'licensed' && next.message) toast(next.message, 'info')
+    } finally {
+      setStartingTrial(false)
+    }
+  }
 
   const deactivate = async () => {
     setDeactivating(true)
@@ -599,6 +640,27 @@ function LicenseSection() {
   return (
     <div>
       <SectionTitle>License</SectionTitle>
+
+      {/* Plan summary */}
+      <div className="mb-3 flex items-center gap-2 text-sm">
+        <span className="text-slate-400">Current plan:</span>
+        <span
+          className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+            tier === 'pro'
+              ? 'bg-accent/15 text-accent-hover'
+              : tier === 'trial'
+                ? 'bg-amber-950/40 text-amber-200'
+                : 'bg-panel-700 text-slate-300'
+          }`}
+        >
+          {tier === 'pro'
+            ? 'Pro'
+            : tier === 'trial'
+              ? `Pro trial — ${status.trialDaysLeft ?? '?'} day${(status.trialDaysLeft ?? 0) === 1 ? '' : 's'} left`
+              : 'Free'}
+        </span>
+      </div>
+
       {info ? (
         <div className="mb-4 overflow-hidden rounded-md border border-panel-600">
           <Row label="Product" value={info.productName} />
@@ -617,16 +679,52 @@ function LicenseSection() {
         <p className="mb-4 text-xs text-slate-500">
           {status.state === 'checking'
             ? 'Checking your license…'
-            : (status.message ?? 'No license is active on this device.')}
+            : (status.message ??
+              (tier === 'free'
+                ? "You're on the Free plan — core features with your own API keys. Upgrade to Pro for the embedded game window, Asset Studio, live scene editing and Auto mode."
+                : 'No license is active on this device.'))}
         </p>
+      )}
+
+      {/* Free tier: enter a key / start trial right here */}
+      {tier === 'free' && (
+        <div className="mb-4 rounded-md border border-panel-600 bg-panel-800 p-3">
+          <p className="mb-2 text-xs font-medium text-slate-400">Have a license key?</p>
+          <div className="flex gap-2">
+            <input
+              value={key}
+              onChange={(e) => setKey(e.target.value.toUpperCase())}
+              onKeyDown={(e) => e.key === 'Enter' && activate()}
+              placeholder="ZIRT-XXXXX-XXXXX-XXXXX-XXXXX"
+              spellCheck={false}
+              className={`${inputClass} font-mono`}
+            />
+            <button
+              onClick={activate}
+              disabled={!key.trim() || activating}
+              className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+            >
+              {activating ? 'Activating…' : 'Activate'}
+            </button>
+          </div>
+          {(config?.trialState ?? '') !== 'used' && (
+            <button
+              onClick={startTrial}
+              disabled={startingTrial}
+              className="mt-2 w-full rounded-md border border-accent/50 bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent-hover hover:bg-accent/20 disabled:opacity-50"
+            >
+              {startingTrial ? 'Starting…' : 'Start free 7-day Pro trial'}
+            </button>
+          )}
+        </div>
       )}
 
       <div className="flex flex-col gap-2">
         <button
-          onClick={() => window.devpad.license.openAccount()}
+          onClick={() => (tier === 'pro' ? window.devpad.license.openAccount() : window.devpad.license.openPricing())}
           className="w-fit rounded-md border border-panel-600 bg-panel-700 px-3 py-1.5 text-xs text-slate-200 hover:bg-panel-600"
         >
-          Manage your license at zirtola.com
+          {tier === 'pro' ? 'Manage your license at zirtola.com' : 'See plans & pricing at zirtola.com'}
         </button>
         {info &&
           (confirming ? (

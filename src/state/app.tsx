@@ -11,7 +11,9 @@ import type {
   DevPadConfig,
   GodotStatus,
   GodotVersionsFile,
+  LicenseStatus,
   McpStatus,
+  Tier,
   UpdateStatus,
   BridgeStatus,
 } from '@shared/types'
@@ -29,6 +31,10 @@ interface AppState {
   mcpStatus: McpStatus
   updateStatus: UpdateStatus
   bridgeStatus: BridgeStatus
+  /** Live license status mirrored from the main process. */
+  license: LicenseStatus
+  /** Access tier while the app runs ('trial' | 'pro' | 'free'), else null. */
+  tier: Tier | null
   /** Persist a partial config update and refresh the cached copy. */
   update: (partial: Partial<DevPadConfig>) => Promise<void>
   refreshVersions: () => Promise<void>
@@ -69,6 +75,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     port: 3728,
   })
   const [ready, setReady] = useState(false)
+  const [license, setLicense] = useState<LicenseStatus>({ state: 'checking' })
+
+  // Mirror the main process's license state (single source for gate, toolbar
+  // badge, chat auto-apply and settings). Guard the snapshot against racing a
+  // live event.
+  useEffect(() => {
+    let sawEvent = false
+    window.devpad.license.getStatus().then((s) => {
+      if (!sawEvent) setLicense(s)
+    })
+    return window.devpad.license.onStatus((s) => {
+      sawEvent = true
+      setLicense(s)
+    })
+  }, [])
 
   const update = useCallback(async (partial: Partial<DevPadConfig>) => {
     const next = await window.devpad.config.setMany(partial)
@@ -118,6 +139,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  // Derive the tier the same way the main process does.
+  const tier: Tier | null =
+    license.state === 'licensed'
+      ? (license.tier ?? 'pro')
+      : license.state === 'free'
+        ? 'free'
+        : null
+
   const value = useMemo<AppState>(
     () => ({
       ready,
@@ -127,6 +156,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       mcpStatus,
       updateStatus,
       bridgeStatus,
+      license,
+      tier,
       update,
       refreshVersions,
       refreshMcp,
@@ -140,6 +171,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       mcpStatus,
       updateStatus,
       bridgeStatus,
+      license,
+      tier,
       update,
       refreshVersions,
       refreshMcp,

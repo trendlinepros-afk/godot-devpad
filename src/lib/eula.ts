@@ -5,5 +5,5 @@ import eulaText from '../../build/eula.txt?raw'
 // in-app on first launch. Bump EULA_VERSION when the text changes materially —
 // users must re-accept the new version.
 
-export const EULA_VERSION = '1.0'
+export const EULA_VERSION = '1.1'
 export const EULA_TEXT: string = eulaText

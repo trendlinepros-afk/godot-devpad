@@ -28,6 +28,7 @@ const defaults: DevPadConfig = {
   monitorPosition: 'auto',
   windowBounds: { width: 1200, height: 800 },
   eulaAcceptedVersion: '',
+  trialState: '',
 }
 
 export const store = new Store<DevPadConfig>({

@@ -70,9 +70,12 @@ import {
   activate as activateLicense,
   revalidate as revalidateLicense,
   deactivate as deactivateLicense,
-  isLicensed,
+  startTrial as startLicenseTrial,
+  continueFree as continueLicenseFree,
+  getTier,
   stopLicensing,
   ACCOUNT_URL,
+  PRICING_URL,
 } from './licensing'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -166,6 +169,7 @@ function paneScreenRect(rect: EmbedRect): { x: number; y: number; width: number;
 async function attemptEmbed(): Promise<void> {
   if (
     process.platform !== 'win32' ||
+    getTier() === 'free' || // embedded window is a Pro feature
     getConfig().godotWindowMode !== 'embedded' ||
     !embedSupported() ||
     !mainWindow ||
@@ -313,9 +317,10 @@ let hotkeysActive = false
 
 function syncHotkeys(): void {
   const focused = BrowserWindow.getFocusedWindow() != null
-  // Never hold the keys unlicensed — the handlers would no-op while still
-  // swallowing F5/F6/F7 from every other app.
-  const want = isLicensed() && (focused || getGodotStatus().state !== 'stopped')
+  // Hotkeys run/stop Godot — available on every tier (incl. free), but never
+  // while the app is still gated: the handlers would no-op while swallowing
+  // F5/F6/F7 from every other app.
+  const want = getTier() !== null && (focused || getGodotStatus().state !== 'stopped')
   if (want === hotkeysActive) return
   hotkeysActive = want
   if (want) registerHotkeys()
@@ -331,7 +336,7 @@ function registerHotkeys(): void {
   // F5 → Run, F6 → Stop, F7 → Restart. We perform the action AND notify the
   // renderer so the UI reflects the new state.
   globalShortcut.register('F5', () => {
-    if (!isLicensed()) return
+    if (getTier() === null) return
     try {
       runGodot()
     } catch (err) {
@@ -343,12 +348,12 @@ function registerHotkeys(): void {
     send('run')
   })
   globalShortcut.register('F6', () => {
-    if (!isLicensed()) return
+    if (getTier() === null) return
     stopGodot()
     send('stop')
   })
   globalShortcut.register('F7', () => {
-    if (!isLicensed()) return
+    if (getTier() === null) return
     try {
       restartGodot()
     } catch (err) {
@@ -382,9 +387,25 @@ const LICENSE_EXEMPT_CHANNELS = new Set([
   'embed:clear',
 ])
 
+// Pro-only capabilities. Free tier keeps the core (BYOK AI, run/console,
+// files, notes, checkpoints); these unlock with a trial or a Pro license.
+const PRO_CHANNELS = new Set([
+  'assets:generate', // Asset Studio image generation
+  'bridge:request', // live scene editing through the editor addon
+  'bridge:installAddon',
+  'mcp:setEnabled', // MCP server
+])
+// Embedded-window mode is Pro too, but its park/detach cleanup must always
+// work (see LICENSE_EXEMPT_CHANNELS) — so only gate it at the feature level.
+const PRO_PREFIXES: string[] = []
+
 function requiresLicense(channel: string): boolean {
   if (LICENSE_EXEMPT_CHANNELS.has(channel)) return false
   return !LICENSE_EXEMPT_PREFIXES.some((p) => channel.startsWith(p))
+}
+
+function isProChannel(channel: string): boolean {
+  return PRO_CHANNELS.has(channel) || PRO_PREFIXES.some((p) => channel.startsWith(p))
 }
 
 function handle(
@@ -392,8 +413,17 @@ function handle(
   fn: (event: Electron.IpcMainInvokeEvent, ...args: never[]) => unknown,
 ): void {
   ipcMain.handle(channel, (event, ...args) => {
-    if (requiresLicense(channel) && !isLicensed()) {
-      throw new Error('A valid Zirtola license is required to use this feature.')
+    if (requiresLicense(channel)) {
+      const tier = getTier()
+      if (tier === null) {
+        // Still gated (no trial/license/free choice yet, or blocked).
+        throw new Error('A valid Zirtola license is required to use this feature.')
+      }
+      if (tier === 'free' && isProChannel(channel)) {
+        throw new Error(
+          'This is a Zirtola Pro feature — start your free trial or upgrade at zirtola.com.',
+        )
+      }
     }
     return fn(event, ...(args as never[]))
   })
@@ -403,9 +433,12 @@ function registerIpc(): void {
   // Licensing (always available — it's how the app becomes licensed)
   handle('license:status', () => getLicenseStatus())
   handle('license:activate', (_e, key: string) => activateLicense(String(key)))
+  handle('license:startTrial', () => startLicenseTrial())
+  handle('license:continueFree', () => continueLicenseFree())
   handle('license:revalidate', () => revalidateLicense())
   handle('license:deactivate', () => deactivateLicense())
   handle('license:openAccount', () => shell.openExternal(ACCOUNT_URL))
+  handle('license:openPricing', () => shell.openExternal(PRICING_URL))
 
   // Config
   handle('config:getAll', () => getConfig())
@@ -605,7 +638,14 @@ app.whenReady().then(async () => {
   const onLicenseTransition = (state: string) => {
     if (state === 'licensed') {
       startLicensedServices()
+    } else if (state === 'free') {
+      // Downgrade, not lockout: core keeps running. Pro services stop and an
+      // embedded game pops back out to its own window — but a running game is
+      // never killed mid-session.
+      if (servicesStarted) stopLicensedServices()
+      clearEmbed()
     } else if (servicesStarted) {
+      // Gate states (blocked / needs_key / …): wind everything down.
       stopLicensedServices()
       stopGodot()
       clearEmbed()
