@@ -6,7 +6,7 @@ import { listDir, readFileText, resolveProjectPath } from './files'
 import { restartGodot, stopGodot } from './godot'
 import { getConfig } from './store'
 import { findVersionById } from './versions'
-import { findProfile } from '../src/lib/profiles'
+import { resolveModel } from '../src/lib/providerTiers'
 
 // Local MCP server (main process). Runs an Express app on port 3727 so an
 // external Claude Code client can auto-discover and call DevPad's tools by
@@ -213,11 +213,12 @@ function buildApp(): Express {
   a.post('/get_project_info', (_req: Request, res: Response) => {
     const cfg = getConfig()
     const version = findVersionById(cfg.activeVersionId)
-    const profile = findProfile(cfg.profiles, cfg.activeProfileId)
+    const model = resolveModel(cfg.modelSelection)
     res.json({
       projectDir: cfg.projectDir,
       godotVersion: version?.label ?? cfg.activeVersionId,
-      activeProfile: profile?.name ?? cfg.activeProfileId,
+      activeProfile: model.label,
+      activeModel: model.label,
     })
   })
 

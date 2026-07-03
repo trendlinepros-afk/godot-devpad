@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { GitCheckpoint } from '@shared/types'
-import { Modal } from './ModelProfileEditor'
+import { Modal } from './Modal'
 import { useToast } from './Toast'
 import { RestartIcon } from './Icons'
 

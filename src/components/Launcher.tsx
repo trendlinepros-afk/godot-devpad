@@ -3,7 +3,7 @@ import { useApp } from '../state/app'
 import { useToast } from './Toast'
 import { UpdateControls } from './UpdateControls'
 import { GodotSetup } from './GodotSetup'
-import { Modal } from './ModelProfileEditor'
+import { Modal } from './Modal'
 import { detectVersionFromPath } from '../lib/godot-versions'
 import { FolderIcon, FolderOpenIcon, PlusIcon, GearIcon } from './Icons'
 

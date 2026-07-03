@@ -1,5 +1,6 @@
 import OpenAI from 'openai'
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import Anthropic from '@anthropic-ai/sdk'
 import type { ChatMessageInput, ModelId, ProviderId } from '@shared/types'
 import { MODEL_REGISTRY } from '../../src/lib/models'
 
@@ -21,13 +22,23 @@ export interface ProviderCall {
   /** Base64 PNG (no data: prefix). */
   imageBase64?: string | null
   history?: ChatMessageInput[]
+  /**
+   * The provider to dispatch to. Set explicitly by the router (from the model
+   * selection) so we don't have to infer it from the model-id string. Falls back
+   * to providerFor(modelId) when omitted (back-compat).
+   */
+  provider?: ProviderId
 }
 
 export interface ProviderKeys {
   deepseek: string
   gemini: string
   openai: string
+  anthropic: string
 }
+
+/** Anthropic requires an explicit output cap; ~16k stays under SDK HTTP timeouts. */
+const ANTHROPIC_MAX_TOKENS = 16000
 
 // Map our internal model ids to the concrete API model names each provider uses.
 const API_MODEL_NAME: Record<string, string> = {
@@ -110,6 +121,44 @@ async function callGemini(call: ProviderCall, apiKey: string): Promise<string> {
   return result.response.text()
 }
 
+// ── Anthropic (Claude) ───────────────────────────────────────────────────────
+
+/** Concatenate the text blocks of an Anthropic message response. */
+function anthropicText(msg: Anthropic.Message): string {
+  return msg.content
+    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+    .map((b) => b.text)
+    .join('')
+}
+
+/** Build the user turn's content — a plain string, or text + image blocks. */
+function anthropicUserContent(call: ProviderCall): Anthropic.MessageParam['content'] {
+  if (call.imageBase64) {
+    return [
+      ...(call.text ? [{ type: 'text' as const, text: call.text }] : []),
+      {
+        type: 'image' as const,
+        source: { type: 'base64' as const, media_type: 'image/png' as const, data: call.imageBase64 },
+      },
+    ]
+  }
+  return call.text
+}
+
+async function callAnthropic(call: ProviderCall, apiKey: string): Promise<string> {
+  const client = new Anthropic({ apiKey })
+  const messages: Anthropic.MessageParam[] = []
+  for (const h of call.history ?? []) messages.push({ role: h.role, content: h.content })
+  messages.push({ role: 'user', content: anthropicUserContent(call) })
+  const msg = await client.messages.create({
+    model: apiModelName(call.modelId),
+    max_tokens: ANTHROPIC_MAX_TOKENS,
+    ...(call.systemPrompt ? { system: call.systemPrompt } : {}),
+    messages,
+  })
+  return anthropicText(msg)
+}
+
 // ── MCP (route through the local MCP server's /chat relay) ────────────────────
 
 async function callMcp(call: ProviderCall, port: number): Promise<string> {
@@ -142,7 +191,7 @@ export async function callProvider(
   keys: ProviderKeys,
   mcpPort: number,
 ): Promise<string> {
-  const provider = providerFor(call.modelId)
+  const provider = call.provider ?? providerFor(call.modelId)
   switch (provider) {
     case 'deepseek':
       if (!keys.deepseek) throw new MissingKeyError('deepseek')
@@ -153,6 +202,9 @@ export async function callProvider(
     case 'gemini':
       if (!keys.gemini) throw new MissingKeyError('gemini')
       return callGemini(call, keys.gemini)
+    case 'anthropic':
+      if (!keys.anthropic) throw new MissingKeyError('anthropic')
+      return callAnthropic(call, keys.anthropic)
     case 'mcp':
       return callMcp(call, mcpPort)
     default:
@@ -341,6 +393,83 @@ async function callGeminiAgentic(
   return result.response.text()
 }
 
+const ANTHROPIC_TOOLS: Anthropic.Tool[] = [
+  {
+    name: 'read_file',
+    description:
+      'Read the UTF-8 contents of a file in the Godot project. Use a res:// or project-relative path (see the PROJECT FILES list).',
+    input_schema: {
+      type: 'object',
+      properties: { path: { type: 'string', description: 'e.g. res://scripts/player.gd' } },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'list_files',
+    description: 'List the files and folders in a project directory.',
+    input_schema: {
+      type: 'object',
+      properties: { dir: { type: 'string', description: 'res:// or project-relative dir' } },
+    },
+  },
+  {
+    name: 'get_godot_errors',
+    description:
+      'Get the current errors and warnings from the running Godot game console. Call this to see runtime errors so you can diagnose and fix them.',
+    input_schema: { type: 'object', properties: {} },
+  },
+]
+
+async function callAnthropicAgentic(
+  call: ProviderCall,
+  apiKey: string,
+  exec: ToolExecutor,
+  onProgress?: ProgressFn,
+): Promise<string> {
+  const client = new Anthropic({ apiKey })
+  const system = call.systemPrompt || undefined
+  const messages: Anthropic.MessageParam[] = []
+  for (const h of call.history ?? []) messages.push({ role: h.role, content: h.content })
+  messages.push({ role: 'user', content: call.text })
+
+  for (let i = 0; i < MAX_TOOL_ITERS; i++) {
+    onProgress?.('status', i === 0 ? 'Thinking…' : 'Working through your project…')
+    const resp = await client.messages.create({
+      model: apiModelName(call.modelId),
+      max_tokens: ANTHROPIC_MAX_TOKENS,
+      ...(system ? { system } : {}),
+      tools: ANTHROPIC_TOOLS,
+      messages,
+    })
+    const toolUses = resp.content.filter(
+      (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use',
+    )
+    if (resp.stop_reason === 'tool_use' && toolUses.length > 0) {
+      messages.push({ role: 'assistant', content: resp.content })
+      const results: Anthropic.ToolResultBlockParam[] = []
+      for (const tu of toolUses) {
+        const args = (tu.input ?? {}) as Record<string, unknown>
+        onProgress?.('tool', toolLabel(tu.name, args))
+        const out = await exec(tu.name, args)
+        results.push({ type: 'tool_result', tool_use_id: tu.id, content: cap(out) })
+      }
+      messages.push({ role: 'user', content: results })
+      continue
+    }
+    onProgress?.('status', 'Writing response…')
+    return anthropicText(resp)
+  }
+  // Hit the iteration cap — ask for a final answer with no more tools.
+  onProgress?.('status', 'Finishing up…')
+  const final = await client.messages.create({
+    model: apiModelName(call.modelId),
+    max_tokens: ANTHROPIC_MAX_TOKENS,
+    ...(system ? { system } : {}),
+    messages: [...messages, { role: 'user', content: 'Now give your final answer.' }],
+  })
+  return anthropicText(final)
+}
+
 /**
  * Provider call WITH read-only file tools. Used for text tasks so the AI can
  * pull file contents on its own. Falls back to a plain call on any error.
@@ -352,7 +481,7 @@ export async function callProviderAgentic(
   exec: ToolExecutor,
   onProgress?: ProgressFn,
 ): Promise<string> {
-  const provider = providerFor(call.modelId)
+  const provider = call.provider ?? providerFor(call.modelId)
   try {
     switch (provider) {
       case 'deepseek':
@@ -364,6 +493,9 @@ export async function callProviderAgentic(
       case 'gemini':
         if (!keys.gemini) throw new MissingKeyError('gemini')
         return await callGeminiAgentic(call, keys.gemini, exec, onProgress)
+      case 'anthropic':
+        if (!keys.anthropic) throw new MissingKeyError('anthropic')
+        return await callAnthropicAgentic(call, keys.anthropic, exec, onProgress)
       case 'mcp':
         return await callMcp(call, mcpPort)
       default:
@@ -438,6 +570,14 @@ export async function testProvider(
           keys.gemini,
         )
         return { ok: true, message: 'Gemini connection OK.' }
+      }
+      case 'anthropic': {
+        if (!keys.anthropic) return { ok: false, message: 'No Anthropic key set.' }
+        await callAnthropic(
+          { modelId: 'claude-haiku-4-5', systemPrompt: '', text: 'ping', provider: 'anthropic' },
+          keys.anthropic,
+        )
+        return { ok: true, message: 'Anthropic connection OK.' }
       }
       default:
         return { ok: false, message: 'MCP does not require an API key.' }

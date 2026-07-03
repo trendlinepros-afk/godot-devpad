@@ -186,28 +186,25 @@ Each note has an **AI** toggle. Notes you pin are **shared with the AI on every 
   },
   {
     id: 'profiles',
-    title: 'Model profiles & routing',
+    title: 'Choosing your AI model',
     category: 'Settings',
-    keywords: ['profile', 'model', 'deepseek', 'gemini', 'openai', 'claude', 'cost', 'quality', 'routing'],
-    body: `A **profile** maps each task — chat, vision, vision→code, file analysis — to a specific model. Switch the active profile from the toolbar.
+    keywords: ['model', 'provider', 'tier', 'cheap', 'mild', 'expensive', 'anthropic', 'claude', 'deepseek', 'gemini', 'openai', 'cost', 'quality', 'routing'],
+    body: `Pick your AI in **Settings → AI / Models → Model**, or from the model dropdown in the toolbar. You choose a **provider** and a **tier**:
 
-Built-in profiles:
+- **Cheap** — fastest and least expensive.
+- **Mild** — the everyday workhorse (recommended).
+- **Expensive** — top capability for hard, multi-step work.
 
-- **Cheap** — fastest/cheapest (DeepSeek-heavy).
-- **Balanced** — a mix.
-- **Quality** — best results (Gemini/GPT).
-- **MCP** — routes through Claude Code via the local MCP server.
-
-Create your own in **Settings → AI / Models → Manage Profiles**; each task slot only offers models capable of that task.`,
+Providers: **Anthropic (Claude)**, **OpenAI (GPT)**, **Google (Gemini)**, **DeepSeek**, or **Claude via MCP** (Pro). The exact model in use is always shown next to the selector and in the chat header, so you can A/B test models and see precisely which one is answering.`,
   },
   {
     id: 'api-keys',
     title: 'API keys',
     category: 'Settings',
-    keywords: ['api', 'key', 'settings', 'deepseek', 'gemini', 'openai', 'test connection'],
+    keywords: ['api', 'key', 'settings', 'anthropic', 'claude', 'deepseek', 'gemini', 'openai', 'test connection'],
     body: `Add your keys in **Settings → AI / Models → API Keys**. Use **Test** to verify each one.
 
-Keys are stored **locally and encrypted** — nothing is uploaded. You need at least one key to chat (the MCP profile needs none). Asset generation needs an **OpenAI** key.`,
+Keys are stored **locally and encrypted** — nothing is uploaded. Add a key for whichever provider you want to use, then pick its model below (MCP mode needs none). Asset generation needs an **OpenAI** key.`,
   },
   {
     id: 'mcp',

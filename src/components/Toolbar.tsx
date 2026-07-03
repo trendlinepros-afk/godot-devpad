@@ -3,8 +3,17 @@ import { useApp } from '../state/app'
 import { useToast } from './Toast'
 import { useTour } from '../state/tour'
 import { overlay } from '../state/overlay'
-import { findProfile } from '../lib/profiles'
-import { modelLabel } from '../lib/models'
+import type { ProviderId } from '@shared/types'
+import {
+  DEFAULT_SELECTION,
+  PROVIDER_LABELS,
+  TIER_LABELS,
+  TIER_LEVELS,
+  TIER_PROVIDER_IDS,
+  providerHasKey,
+  resolveModel,
+  type TierLevel,
+} from '../lib/providerTiers'
 import { CheckpointsModal } from './CheckpointsModal'
 import { AssetStudio } from './AssetStudio'
 import { WikiModal } from './WikiModal'
@@ -15,7 +24,6 @@ import {
   RestartIcon,
   GearIcon,
   ChevronDownIcon,
-  EditIcon,
   HistoryIcon,
   ImageIcon,
   HelpIcon,
@@ -24,14 +32,13 @@ import {
 interface ToolbarProps {
   onHome: () => void
   onOpenSettings: () => void
-  onOpenProfiles: () => void
 }
 
-export function Toolbar({ onHome, onOpenSettings, onOpenProfiles }: ToolbarProps) {
+export function Toolbar({ onHome, onOpenSettings }: ToolbarProps) {
   const { config, godotStatus, update, setGodotStatus, license, tier } = useApp()
   const { toast } = useToast()
   const tour = useTour()
-  const [profileMenuOpen, setProfileMenuOpen] = useState(false)
+  const [modelMenuOpen, setModelMenuOpen] = useState(false)
   const [helpMenuOpen, setHelpMenuOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [assetsOpen, setAssetsOpen] = useState(false)
@@ -46,16 +53,16 @@ export function Toolbar({ onHome, onOpenSettings, onOpenProfiles }: ToolbarProps
   // Toolbar dropdowns open over the main area — hide the embedded game while
   // one is open so it doesn't paint over the menu.
   useEffect(() => {
-    if (profileMenuOpen || helpMenuOpen) {
+    if (modelMenuOpen || helpMenuOpen) {
       overlay.open()
       return () => overlay.close()
     }
-  }, [profileMenuOpen, helpMenuOpen])
+  }, [modelMenuOpen, helpMenuOpen])
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setProfileMenuOpen(false)
+        setModelMenuOpen(false)
       }
       if (helpRef.current && !helpRef.current.contains(e.target as Node)) {
         setHelpMenuOpen(false)
@@ -92,13 +99,14 @@ export function Toolbar({ onHome, onOpenSettings, onOpenProfiles }: ToolbarProps
   const stop = async () => setGodotStatus(await window.devpad.godot.stop())
   const restart = async () => setGodotStatus(await window.devpad.godot.restart())
 
-  const activeProfile = config ? findProfile(config.profiles, config.activeProfileId) : undefined
+  const selection = config?.modelSelection ?? DEFAULT_SELECTION
+  const resolved = resolveModel(config?.modelSelection)
 
-  const switchProfile = async (id: string) => {
-    await update({ activeProfileId: id })
-    setProfileMenuOpen(false)
-    const p = config && findProfile(config.profiles, id)
-    if (p) toast(`Switched to "${p.name}" profile`, 'success')
+  const setProvider = async (provider: ProviderId) => {
+    await update({ modelSelection: { provider, tier: selection.tier } })
+  }
+  const setTier = async (t: TierLevel) => {
+    await update({ modelSelection: { provider: selection.provider, tier: t } })
   }
 
   return (
@@ -222,61 +230,107 @@ export function Toolbar({ onHome, onOpenSettings, onOpenProfiles }: ToolbarProps
         </button>
       )}
 
-      {/* Current model indicator (which model the active profile uses for chat) */}
-      {activeProfile && (
-        <div
-          data-tour="model"
-          title={
-            `Active models for "${activeProfile.name}":\n` +
-            `chat: ${modelLabel(activeProfile.tasks.chat)}\n` +
-            `vision: ${modelLabel(activeProfile.tasks.vision)}\n` +
-            `vision → code: ${modelLabel(activeProfile.tasks.vision_to_code)}\n` +
-            `file analysis: ${modelLabel(activeProfile.tasks.file_analysis)}`
-          }
-          className="ml-2 flex items-center gap-1.5 rounded-full border border-panel-600 bg-panel-800 px-2.5 py-0.5 text-xs text-slate-300"
-        >
-          <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-          <span className="text-slate-500">Model:</span>
-          {modelLabel(activeProfile.tasks.chat)}
-        </div>
-      )}
+      {/* Current model indicator — the exact model answering right now */}
+      <div
+        data-tour="model"
+        title={`Model in use: ${resolved.apiModel}`}
+        className="ml-2 flex items-center gap-1.5 rounded-full border border-panel-600 bg-panel-800 px-2.5 py-0.5 text-xs text-slate-300"
+      >
+        <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+        <span className="text-slate-500">Model:</span>
+        <span className="font-mono">{resolved.apiModel}</span>
+      </div>
 
       <div className="flex-1" />
 
-      {/* Profile quick-switch dropdown */}
+      {/* Model quick-switch dropdown (provider + cheap/mild/expensive tier) */}
       <div className="relative" ref={menuRef} data-tour="profile">
         <button
-          onClick={() => setProfileMenuOpen((o) => !o)}
+          onClick={() => setModelMenuOpen((o) => !o)}
+          title="Switch AI provider & tier"
           className="flex items-center gap-2 rounded-md border border-panel-600 bg-panel-700 px-3 py-1.5 text-sm text-slate-200 hover:bg-panel-600"
         >
           <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-          {activeProfile?.name ?? 'Profile'}
+          {PROVIDER_LABELS[selection.provider]}
+          {selection.provider !== 'mcp' && (
+            <span className="text-xs text-slate-400">· {TIER_LABELS[selection.tier]}</span>
+          )}
           <ChevronDownIcon width={14} height={14} />
         </button>
-        {profileMenuOpen && config && (
-          <div className="absolute right-0 z-30 mt-1 w-56 overflow-hidden rounded-md border border-panel-600 bg-panel-800 py-1 shadow-xl">
-            {config.profiles.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => switchProfile(p.id)}
-                className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-sm hover:bg-panel-700 ${
-                  p.id === config.activeProfileId ? 'text-accent-hover' : 'text-slate-300'
-                }`}
-              >
-                <span>{p.name}</span>
-                {p.id === config.activeProfileId && <span className="text-xs">active</span>}
-              </button>
-            ))}
-            <div className="my-1 border-t border-panel-600" />
+        {modelMenuOpen && config && (
+          <div className="absolute right-0 z-30 mt-1 w-64 overflow-hidden rounded-md border border-panel-600 bg-panel-800 py-1 shadow-xl">
+            <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+              Provider
+            </div>
+            {TIER_PROVIDER_IDS.map((p) => {
+              const has = providerHasKey(config.apiKeys, p)
+              return (
+                <button
+                  key={p}
+                  disabled={!has}
+                  onClick={async () => {
+                    await setProvider(p)
+                    setModelMenuOpen(false)
+                  }}
+                  className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-sm hover:bg-panel-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent ${
+                    selection.provider === p ? 'text-accent-hover' : 'text-slate-300'
+                  }`}
+                >
+                  <span>{PROVIDER_LABELS[p]}</span>
+                  {selection.provider === p ? (
+                    <span className="text-xs">active</span>
+                  ) : !has ? (
+                    <span className="text-[10px] text-slate-500">add key</span>
+                  ) : null}
+                </button>
+              )
+            })}
             <button
-              onClick={() => {
-                setProfileMenuOpen(false)
-                onOpenProfiles()
+              disabled={tier === 'free'}
+              onClick={async () => {
+                await setProvider('mcp')
+                setModelMenuOpen(false)
               }}
-              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-slate-300 hover:bg-panel-700"
+              className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-sm hover:bg-panel-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent ${
+                selection.provider === 'mcp' ? 'text-accent-hover' : 'text-slate-300'
+              }`}
             >
-              <EditIcon width={14} height={14} /> Manage profiles…
+              <span>{PROVIDER_LABELS.mcp}</span>
+              {selection.provider === 'mcp' ? (
+                <span className="text-xs">active</span>
+              ) : tier === 'free' ? (
+                <span className="text-[10px] text-slate-500">Pro</span>
+              ) : null}
             </button>
+
+            {selection.provider !== 'mcp' && (
+              <>
+                <div className="my-1 border-t border-panel-600" />
+                <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                  Tier
+                </div>
+                <div className="flex gap-1 px-3 pb-2">
+                  {TIER_LEVELS.map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setTier(t)}
+                      className={`flex-1 rounded px-2 py-1 text-xs ${
+                        selection.tier === t
+                          ? 'bg-accent text-white'
+                          : 'bg-panel-700 text-slate-300 hover:bg-panel-600'
+                      }`}
+                    >
+                      {TIER_LABELS[t]}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+
+            <div className="my-1 border-t border-panel-600" />
+            <div className="px-3 py-1.5 text-[11px] text-slate-500">
+              Using <span className="font-mono text-slate-300">{resolved.apiModel}</span>
+            </div>
           </div>
         )}
       </div>

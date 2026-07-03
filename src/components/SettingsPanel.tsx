@@ -4,11 +4,22 @@ import { EULA_TEXT, EULA_VERSION } from '../lib/eula'
 import { useApp } from '../state/app'
 import { useToast } from './Toast'
 import { detectVersionFromPath } from '../lib/godot-versions'
-import { XIcon, StarIcon, EditIcon, PlusIcon } from './Icons'
+import { XIcon } from './Icons'
 import { UpdateControls } from './UpdateControls'
 import { GodotSetup } from './GodotSetup'
-import { Modal } from './ModelProfileEditor'
+import { Modal } from './Modal'
 import { overlay } from '../state/overlay'
+import {
+  DEFAULT_SELECTION,
+  PROVIDER_LABELS,
+  PROVIDER_TIERS,
+  TIER_LABELS,
+  TIER_LEVELS,
+  TIER_PROVIDER_IDS,
+  providerHasKey,
+  resolveModel,
+  type TierLevel,
+} from '../lib/providerTiers'
 
 type Section = 'ai' | 'godot' | 'mcp' | 'window' | 'versions' | 'updates' | 'license'
 
@@ -24,10 +35,9 @@ const SECTIONS: { key: Section; label: string }[] = [
 
 interface Props {
   onClose: () => void
-  onOpenProfiles: () => void
 }
 
-export function SettingsPanel({ onClose, onOpenProfiles }: Props) {
+export function SettingsPanel({ onClose }: Props) {
   const [section, setSection] = useState<Section>('ai')
 
   // Hide the embedded Godot window while this drawer is open.
@@ -72,7 +82,7 @@ export function SettingsPanel({ onClose, onOpenProfiles }: Props) {
 
           {/* Section body */}
           <div className="min-w-0 flex-1 overflow-auto p-5">
-            {section === 'ai' && <AiSection onOpenProfiles={onOpenProfiles} />}
+            {section === 'ai' && <AiSection />}
             {section === 'godot' && <GodotSection />}
             {section === 'mcp' && <McpSection />}
             {section === 'window' && <WindowSection />}
@@ -104,12 +114,14 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 const inputClass =
   'w-full rounded-md border border-panel-600 bg-panel-800 px-3 py-1.5 text-sm text-slate-200 focus:border-accent focus:outline-none'
 
-// ── AI / Models (API keys + profiles) — the dedicated AI settings page ────────
+// ── AI / Models (API keys + model selector) — the dedicated AI settings page ──
 
-function AiSection({ onOpenProfiles }: { onOpenProfiles: () => void }) {
-  const { config, update } = useApp()
+const EMPTY_KEYS = { deepseek: '', gemini: '', openai: '', anthropic: '' }
+
+function AiSection() {
+  const { config, update, tier } = useApp()
   const { toast } = useToast()
-  const [keys, setKeys] = useState(config?.apiKeys ?? { deepseek: '', gemini: '', openai: '' })
+  const [keys, setKeys] = useState(config?.apiKeys ?? EMPTY_KEYS)
   const [testing, setTesting] = useState<ProviderId | null>(null)
   const [keysDirty, setKeysDirty] = useState(false)
 
@@ -170,63 +182,94 @@ function AiSection({ onOpenProfiles }: { onOpenProfiles: () => void }) {
     </div>
   )
 
+  // ── Model selector (provider + cheap/mild/expensive) ────────────────────────
+  const selection = config.modelSelection ?? DEFAULT_SELECTION
+  const resolved = resolveModel(config.modelSelection)
+  const setProvider = (provider: ProviderId) =>
+    update({ modelSelection: { provider, tier: selection.tier } })
+  const setTier = (t: TierLevel) =>
+    update({ modelSelection: { provider: selection.provider, tier: t } })
+
   return (
     <div>
       <SectionTitle>API Keys</SectionTitle>
       <p className="mb-3 text-xs leading-relaxed text-slate-500">
-        Keys are stored locally and encrypted in electron-store. Nothing is uploaded. At least one
-        key is required to chat (MCP Mode needs none).
+        Keys are stored locally and encrypted in electron-store. Nothing is uploaded. Add a key for
+        any provider you want to use, then pick its model below (MCP mode needs no key).
       </p>
-      {keyRow('DeepSeek API Key', 'deepseek')}
-      {keyRow('Gemini API Key', 'gemini')}
+      {keyRow('Anthropic API Key (Claude)', 'anthropic')}
       {keyRow('OpenAI API Key', 'openai')}
+      {keyRow('Gemini API Key', 'gemini')}
+      {keyRow('DeepSeek API Key', 'deepseek')}
 
       <div className="my-5 border-t border-panel-600" />
 
-      <SectionTitle>Model Profiles</SectionTitle>
+      <SectionTitle>Model</SectionTitle>
       <p className="mb-3 text-xs leading-relaxed text-slate-500">
-        Profiles map each AI task (chat, vision, vision→code, file analysis) to a specific model.
-        Switch the active profile here or in the toolbar.
+        Pick a provider and a tier. This one model handles all AI tasks. Use the tiers to A/B test
+        models — the exact model in use is shown below.
       </p>
-      <div className="mb-3 overflow-hidden rounded-md border border-panel-600">
-        {config.profiles.map((p) => (
-          <div
-            key={p.id}
-            className="flex items-center gap-2 border-b border-panel-700 px-3 py-2 last:border-b-0"
-          >
-            <span className="w-4">
-              {p.id === config.activeProfileId && (
-                <StarIcon width={13} height={13} className="text-accent-hover" />
-              )}
-            </span>
-            <span className="flex-1 truncate text-sm text-slate-200">
-              {p.name}
-              {p.isDefault && <span className="ml-2 text-[10px] text-slate-500">built-in</span>}
-            </span>
-            {p.id !== config.activeProfileId && (
+
+      <Field label="Provider">
+        <select
+          value={selection.provider}
+          onChange={(e) => setProvider(e.target.value as ProviderId)}
+          className={inputClass}
+        >
+          {TIER_PROVIDER_IDS.map((p) => {
+            const has = providerHasKey(config.apiKeys, p)
+            return (
+              <option key={p} value={p} disabled={!has}>
+                {PROVIDER_LABELS[p]}
+                {has ? '' : ' — add key above'}
+              </option>
+            )
+          })}
+          <option value="mcp" disabled={tier === 'free'}>
+            {PROVIDER_LABELS.mcp}
+            {tier === 'free' ? ' (Pro)' : ''}
+          </option>
+        </select>
+      </Field>
+
+      {selection.provider !== 'mcp' && (
+        <Field label="Tier">
+          <div className="flex overflow-hidden rounded-md border border-panel-600">
+            {TIER_LEVELS.map((t) => (
               <button
-                onClick={() => update({ activeProfileId: p.id })}
-                className="rounded border border-panel-600 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-panel-700"
+                key={t}
+                onClick={() => setTier(t)}
+                title={PROVIDER_TIERS[selection.provider as keyof typeof PROVIDER_TIERS]?.[t]?.apiModel}
+                className={`flex-1 px-3 py-1.5 text-xs ${
+                  selection.tier === t
+                    ? 'bg-accent text-white'
+                    : 'bg-panel-700 text-slate-300 hover:bg-panel-600'
+                }`}
               >
-                Set active
+                {TIER_LABELS[t]}
               </button>
-            )}
+            ))}
           </div>
-        ))}
-      </div>
-      <div className="flex gap-2">
-        <button
-          onClick={onOpenProfiles}
-          className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover"
-        >
-          <EditIcon width={14} height={14} /> Manage Profiles
-        </button>
-        <button
-          onClick={onOpenProfiles}
-          className="flex items-center gap-1.5 rounded-md border border-panel-600 bg-panel-700 px-3 py-1.5 text-sm text-slate-200 hover:bg-panel-600"
-        >
-          <PlusIcon width={14} height={14} /> New Profile
-        </button>
+        </Field>
+      )}
+
+      {/* The exact model being used — the "let me know what llm is being used" line */}
+      <div className="mt-2 rounded-md border border-panel-600 bg-panel-800 px-3 py-2.5">
+        <div className="flex items-center gap-2 text-sm">
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
+          <span className="text-slate-400">Using:</span>
+          <span className="font-mono text-slate-100">{resolved.apiModel}</span>
+          {!resolved.vision && (
+            <span className="rounded bg-panel-700 px-1.5 py-0.5 text-[10px] text-slate-400">
+              no vision
+            </span>
+          )}
+        </div>
+        <div className="mt-1 text-[11px] text-slate-500">
+          {resolved.label}
+          {resolved.note ? ` — ${resolved.note}` : ''}
+          {!resolved.vision && ' · screenshots use a vision-capable provider you have a key for'}
+        </div>
       </div>
     </div>
   )

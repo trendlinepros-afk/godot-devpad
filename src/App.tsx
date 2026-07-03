@@ -14,7 +14,6 @@ import { ChatPanel } from './components/ChatPanel'
 import { EmbedPane } from './components/EmbedPane'
 import { GodotConsole } from './components/GodotConsole'
 import { SettingsPanel } from './components/SettingsPanel'
-import { ModelProfileEditor } from './components/ModelProfileEditor'
 import { SetupWizard } from './components/SetupWizard'
 import { Launcher } from './components/Launcher'
 
@@ -26,7 +25,6 @@ function Root() {
   const { ready, config, refreshVersions, license } = useApp()
   const { toast } = useToast()
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [profilesOpen, setProfilesOpen] = useState(false)
   const [wizardDone, setWizardDone] = useState(false)
   const [view, setView] = useState<View>('launcher')
   // Once the user has entered the app, keep the Shell MOUNTED (hidden) behind
@@ -96,18 +94,11 @@ function Root() {
             visible={view === 'app'}
             onHome={() => setView('launcher')}
             onOpenSettings={() => setSettingsOpen(true)}
-            onOpenProfiles={() => setProfilesOpen(true)}
           />
         </div>
       )}
 
-      {settingsOpen && (
-        <SettingsPanel
-          onClose={() => setSettingsOpen(false)}
-          onOpenProfiles={() => setProfilesOpen(true)}
-        />
-      )}
-      {profilesOpen && <ModelProfileEditor onClose={() => setProfilesOpen(false)} />}
+      {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
     </LicenseGate>
   )
 }
@@ -116,12 +107,10 @@ function Shell({
   visible,
   onHome,
   onOpenSettings,
-  onOpenProfiles,
 }: {
   visible: boolean
   onHome: () => void
   onOpenSettings: () => void
-  onOpenProfiles: () => void
 }) {
   const { config, godotStatus } = useApp()
   const { toast } = useToast()
@@ -172,7 +161,7 @@ function Shell({
 
   return (
     <div className="flex h-full flex-col">
-      <Toolbar onHome={onHome} onOpenSettings={onOpenSettings} onOpenProfiles={onOpenProfiles} />
+      <Toolbar onHome={onHome} onOpenSettings={onOpenSettings} />
       <div className="flex min-h-0 flex-1">
         {/* Left sidebar: Files / Notes */}
         <aside className="flex w-64 shrink-0 flex-col border-r border-panel-600" data-tour="left-tabs">

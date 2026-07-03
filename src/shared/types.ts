@@ -4,7 +4,7 @@
 
 // ── Models ────────────────────────────────────────────────────────────────
 
-export type ProviderId = 'deepseek' | 'gemini' | 'openai' | 'mcp'
+export type ProviderId = 'deepseek' | 'gemini' | 'openai' | 'anthropic' | 'mcp'
 
 export interface ModelCapabilities {
   chat: boolean
@@ -358,6 +358,17 @@ export interface ApiKeys {
   deepseek: string
   gemini: string
   openai: string
+  anthropic: string
+}
+
+/**
+ * The active model choice: a provider plus a cheap/mild/expensive tier. Resolved
+ * to a concrete API model via src/lib/providerTiers.ts. Replaces the old
+ * per-task "profiles" system as the single model control.
+ */
+export interface ModelSelection {
+  provider: ProviderId
+  tier: 'cheap' | 'mild' | 'expensive'
 }
 
 export type MonitorPosition = 'auto' | 0 | 1 | 2 | 3
@@ -399,6 +410,14 @@ export interface DevPadConfig {
   /** Recently-opened project folders, most-recent first. */
   recentProjects: string[]
   activeVersionId: string
+  /**
+   * Active model choice (provider + cheap/mild/expensive tier). The single model
+   * control. Optional so older configs migrate cleanly (see migrateConfig in
+   * electron/store.ts); resolved via resolveModel(), which falls back to the
+   * default when unset. `activeProfileId`/`profiles` are legacy (kept for
+   * back-compat with older configs) and no longer drive routing.
+   */
+  modelSelection?: ModelSelection
   activeProfileId: string
   profiles: ModelProfile[]
   notes: Note[]

@@ -1,5 +1,5 @@
 import { useApp } from '../state/app'
-import { Modal } from './ModelProfileEditor'
+import { Modal } from './Modal'
 import { SparkleIcon } from './Icons'
 
 // Shown when a Free-tier user taps a locked Pro feature. One consistent pitch

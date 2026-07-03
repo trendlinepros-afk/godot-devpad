@@ -9,7 +9,7 @@ import type {
   MonitorPosition,
   ProviderId,
 } from '@shared/types'
-import { store, getConfig, setMany, setKey, ensureDefaultProfiles } from './store'
+import { store, getConfig, setMany, setKey, ensureDefaultProfiles, migrateConfig } from './store'
 import {
   runGodot,
   stopGodot,
@@ -627,6 +627,7 @@ function stopLicensedServices(): void {
 
 app.whenReady().then(async () => {
   ensureDefaultProfiles()
+  migrateConfig()
   registerIpc()
   createWindow()
   syncHotkeys()

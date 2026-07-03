@@ -1,8 +1,7 @@
-import type { AiRequest, AiResponse, ModelProfile } from '@shared/types'
+import type { AiRequest, AiResponse } from '@shared/types'
 import { getConfig } from '../store'
 import { findVersionById } from '../versions'
-import { findProfile, DEFAULT_PROFILE_ID } from '../../src/lib/profiles'
-import { modelLabel } from '../../src/lib/models'
+import { resolveModel, visionFallback, type ResolvedModel } from '../../src/lib/providerTiers'
 import {
   callProvider,
   callProviderAgentic,
@@ -21,13 +20,9 @@ export const MCP_PORT = 3727
 // rules described in src/lib/router.ts. It runs in the main process so it can
 // read API keys from electron-store and reach the network/MCP server.
 
-function activeProfile(): ModelProfile {
-  const cfg = getConfig()
-  return (
-    findProfile(cfg.profiles, cfg.activeProfileId) ??
-    findProfile(cfg.profiles, DEFAULT_PROFILE_ID) ??
-    cfg.profiles[0]
-  )
+/** The model the user has selected (provider + cheap/mild/expensive tier). */
+function activeSelection(): ResolvedModel {
+  return resolveModel(getConfig().modelSelection)
 }
 
 /**
@@ -205,11 +200,25 @@ How to do it safely:
 The developer reviews the diff like any other edit, and a checkpoint is saved
 before it's applied — so make the change yourself rather than describing it.`
 
+// Auto mode: edits apply automatically, so the model must actually MAKE the
+// edits (emit the blocks) this turn instead of describing them and asking to
+// proceed — otherwise "Auto" feels no different from "Ask".
+const AUTO_MODE_PROMPT = `
+
+--- AUTO MODE (edits are pre-approved) ---
+Auto mode is ON: the developer has pre-approved your changes and they apply
+automatically. Make ALL requested file and scene changes NOW by emitting the
+zirtola-edit / zirtola-scene blocks in this reply. Do NOT ask "should I…?",
+"would you like me to…?", "shall I proceed?", or otherwise wait for approval —
+there is nothing to approve. Complete the whole task in this turn, then give a
+short summary of what you changed.`
+
 /** System prompt for code-capable tasks, varying by mode. */
 function codeSystemPrompt(mode: 'plan' | 'build'): string {
   if (mode === 'plan') return `${systemPrompt()}${PLAN_PROMPT}`
   const sceneProtocol = getBridgeStatus().connected ? SCENE_PROTOCOL_PROMPT : SCENE_FALLBACK_PROMPT
-  return `${systemPrompt()}${EDIT_PROTOCOL_PROMPT}${sceneProtocol}`
+  const autoMode = getConfig().agentMode === 'auto' ? AUTO_MODE_PROMPT : ''
+  return `${systemPrompt()}${EDIT_PROTOCOL_PROMPT}${sceneProtocol}${autoMode}`
 }
 
 function keys(): ProviderKeys {
@@ -253,6 +262,7 @@ function missingKeyResponse(err: MissingKeyError): AiResponse {
     deepseek: 'DeepSeek',
     gemini: 'Gemini',
     openai: 'OpenAI',
+    anthropic: 'Anthropic',
   }
   const name = names[err.provider] ?? err.provider
   return {
@@ -272,21 +282,40 @@ function missingKeyResponse(err: MissingKeyError): AiResponse {
  *                    above naturally flow through the MCP server.
  */
 export async function route(req: AiRequest, onProgress?: ProgressFn): Promise<AiResponse> {
-  const profile = activeProfile()
+  // TODO tier policy: when managed keys ship, gate the selection by getTier()
+  // here. Today Free and Pro resolve identically (BYOK — the user pays).
+  const selected = activeSelection()
   const sys = systemPrompt()
   const codeSys = codeSystemPrompt(req.mode ?? 'build')
   const k = keys()
 
   try {
-    // ── Screenshot: two-step vision → vision_to_code pipeline ───────────────
+    // ── Screenshot: describe with a vision model, then answer with the selected model ──
     if (req.screenshot) {
-      const visionModel = profile.tasks.vision
-      const v2cModel = profile.tasks.vision_to_code
+      // The selected model may not accept images (e.g. any DeepSeek tier) — fall
+      // back to a vision-capable provider that has a key just for the describe step.
+      let visionProvider = selected.provider
+      let visionModel = selected.apiModel
+      if (!selected.vision) {
+        const fb = visionFallback(k)
+        if (!fb) {
+          return {
+            ok: false,
+            text: '',
+            error:
+              'The selected model can’t read images. Add an Anthropic, OpenAI, or Gemini API key (a vision-capable provider) in **Settings → API Keys** to analyze screenshots.',
+            needsSettings: true,
+          }
+        }
+        visionProvider = fb.provider
+        visionModel = fb.apiModel
+      }
 
       onProgress?.('status', 'Looking at your screenshot…')
       // Step 1 — describe the screenshot.
       const description = await callProvider(
         {
+          provider: visionProvider,
           modelId: visionModel,
           systemPrompt: sys,
           text:
@@ -303,7 +332,8 @@ export async function route(req: AiRequest, onProgress?: ProgressFn): Promise<Ai
       // Step 2 — answer using the description + the original message.
       const answer = await callProviderAgentic(
         {
-          modelId: v2cModel,
+          provider: selected.provider,
+          modelId: selected.apiModel,
           systemPrompt: codeSys,
           text: [
             'A screenshot of the Godot project was analysed. Here is the description:',
@@ -322,37 +352,42 @@ export async function route(req: AiRequest, onProgress?: ProgressFn): Promise<Ai
         onProgress,
       )
 
-      return {
-        ok: true,
-        text: answer,
-        modelId: v2cModel,
-        modelLabel: modelLabel(v2cModel),
-      }
+      return { ok: true, text: answer, modelId: selected.apiModel, modelLabel: selected.label }
     }
 
     // ── File analysis ────────────────────────────────────────────────────────
     if (req.fileAnalysis) {
-      const model = profile.tasks.file_analysis
       const text = await callProviderAgentic(
-        { modelId: model, systemPrompt: codeSys, text: req.text, history: req.history },
+        {
+          provider: selected.provider,
+          modelId: selected.apiModel,
+          systemPrompt: codeSys,
+          text: req.text,
+          history: req.history,
+        },
         k,
         MCP_PORT,
         execTool,
         onProgress,
       )
-      return { ok: true, text, modelId: model, modelLabel: modelLabel(model) }
+      return { ok: true, text, modelId: selected.apiModel, modelLabel: selected.label }
     }
 
     // ── Text-only chat (AI can read project files via tools) ────────────────────
-    const model = profile.tasks.chat
     const text = await callProviderAgentic(
-      { modelId: model, systemPrompt: codeSys, text: req.text, history: req.history },
+      {
+        provider: selected.provider,
+        modelId: selected.apiModel,
+        systemPrompt: codeSys,
+        text: req.text,
+        history: req.history,
+      },
       k,
       MCP_PORT,
       execTool,
       onProgress,
     )
-    return { ok: true, text, modelId: model, modelLabel: modelLabel(model) }
+    return { ok: true, text, modelId: selected.apiModel, modelLabel: selected.label }
   } catch (err) {
     if (err instanceof MissingKeyError) return missingKeyResponse(err)
     return {

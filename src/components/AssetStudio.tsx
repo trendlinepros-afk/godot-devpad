@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { AssetKind } from '@shared/types'
-import { Modal } from './ModelProfileEditor'
+import { Modal } from './Modal'
 import { useToast } from './Toast'
 import { chatBus } from '../state/chatBus'
 

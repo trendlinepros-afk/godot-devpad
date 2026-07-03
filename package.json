@@ -1,7 +1,7 @@
 {
   "name": "zirtola",
-  "version": "0.1.26",
-  "description": "Zirtola \u2014 The AI Video Game Editor. A local-first Godot game development companion with an integrated AI assistant.",
+  "version": "0.2.0",
+  "description": "Zirtola — The AI Video Game Editor. A local-first Godot game development companion with an integrated AI assistant.",
   "author": "Zirtola",
   "license": "MIT",
   "private": true,
@@ -17,19 +17,20 @@
     "dist": "node -e \"const fs=require('fs');for(const d of ['dist','dist-electron'])fs.rmSync(d,{recursive:true,force:true})\" && npm run build && electron-builder"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.110.0",
     "@google/generative-ai": "^0.21.0",
     "adm-zip": "^0.5.16",
     "electron-store": "^8.2.0",
-    "koffi": "^2.9.0",
     "electron-updater": "^6.3.9",
     "express": "^4.21.2",
+    "koffi": "^2.9.0",
     "openai": "^4.77.0",
     "react": "^18.3.1",
-    "ws": "^8.18.0",
     "react-dom": "^18.3.1",
     "react-markdown": "^9.0.1",
     "react-syntax-highlighter": "^15.6.1",
-    "remark-gfm": "^4.0.0"
+    "remark-gfm": "^4.0.0",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.7",

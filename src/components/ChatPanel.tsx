@@ -5,7 +5,7 @@ import { routeMessage } from '../lib/router'
 import { useApp } from '../state/app'
 import { useToast } from './Toast'
 import { chatBus } from '../state/chatBus'
-import { findProfile } from '../lib/profiles'
+import { resolveModel } from '../lib/providerTiers'
 import { parseSegments } from '../lib/edits'
 import {
   PROJECT_MEMORY_ID,
@@ -46,7 +46,8 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
   const [busy, setBusy] = useState(false)
   // Live activity line shown under the messages while busy ("Reading player.gd…").
   const [activity, setActivity] = useState<string>('Thinking…')
-  const [lastModel, setLastModel] = useState<string | null>(null)
+  // The model currently selected (provider + tier) — shown in the header.
+  const selectedModel = resolveModel(config?.modelSelection)
   // Autonomy mode is global (toolbar): 'chat' read-only, 'ask' approve, 'auto' apply.
   const agentMode = config?.agentMode ?? 'ask'
   const counter = useRef(0)
@@ -61,7 +62,9 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
     hydrated.current = true
     const saved = config.chatMessages ?? []
     if (saved.length) {
-      setMessages(saved as ChatMessage[])
+      // Historical messages must never re-apply their edits on load — force
+      // autoApply off so restored EditCards render as already-handled history.
+      setMessages((saved as ChatMessage[]).map((m) => ({ ...m, autoApply: false })))
       counter.current = Math.max(0, ...saved.map((m) => m.id))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -85,8 +88,6 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
       if (e.kind === 'status' || e.kind === 'tool') setActivity(e.text)
     })
   }, [])
-
-  const activeProfile = config ? findProfile(config.profiles, config.activeProfileId) : undefined
 
   // Let other panels push text into the chat. With { submit:true } (the Godot
   // console's "Fix" button) the message is sent immediately via sendRef.
@@ -169,7 +170,6 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
         })
 
         if (res.ok) {
-          setLastModel(res.modelLabel ?? res.modelId ?? null)
           setMessages((m) => [
             ...m,
             {
@@ -292,7 +292,6 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
 
   const clearChat = () => {
     setMessages([])
-    setLastModel(null)
     void update({ chatMessages: [] })
   }
 
@@ -313,12 +312,13 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
           </span>
         </div>
         <div className="flex items-center gap-2">
-          {lastModel && (
-            <span className="flex items-center gap-1.5 rounded-full border border-panel-600 bg-panel-800 px-2.5 py-0.5 text-xs text-slate-300">
-              <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-              {lastModel}
-            </span>
-          )}
+          <span
+            title={`Model in use: ${selectedModel.apiModel}`}
+            className="flex items-center gap-1.5 rounded-full border border-panel-600 bg-panel-800 px-2.5 py-0.5 text-xs text-slate-300"
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+            <span className="font-mono">{selectedModel.apiModel}</span>
+          </span>
           <button
             onClick={() => updateSummary(true)}
             disabled={summarizing || busy}
@@ -414,9 +414,7 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKeyDown}
             rows={1}
-            placeholder={
-              activeProfile ? `Message ${activeProfile.name}…` : 'Type a message…'
-            }
+            placeholder={`Message ${selectedModel.label}…`}
             className="max-h-40 min-h-[2.25rem] flex-1 resize-none rounded-md border border-panel-600 bg-panel-800 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:border-accent focus:outline-none"
           />
           <button

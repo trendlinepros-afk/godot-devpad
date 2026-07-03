@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Modal } from './ModelProfileEditor'
+import { Modal } from './Modal'
 import { Markdown } from './Markdown'
 import { WIKI_ARTICLES, WIKI_CATEGORIES, type WikiArticle } from '../lib/wiki'
 import { SearchIcon } from './Icons'

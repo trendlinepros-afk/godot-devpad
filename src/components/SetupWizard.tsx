@@ -20,7 +20,9 @@ export function SetupWizard({ onDone }: Props) {
   const [step, setStep] = useState(1)
   const [projectDir, setProjectDir] = useState(config?.projectDir ?? '')
   const [exePath, setExePath] = useState(config?.godotExecutablePath ?? '')
-  const [keys, setKeys] = useState(config?.apiKeys ?? { deepseek: '', gemini: '', openai: '' })
+  const [keys, setKeys] = useState(
+    config?.apiKeys ?? { deepseek: '', gemini: '', openai: '', anthropic: '' },
+  )
 
   const totalSteps = 5
 
@@ -153,9 +155,10 @@ export function SetupWizard({ onDone }: Props) {
               </p>
               {(
                 [
-                  ['DeepSeek', 'deepseek'],
-                  ['Gemini', 'gemini'],
+                  ['Anthropic (Claude)', 'anthropic'],
                   ['OpenAI', 'openai'],
+                  ['Gemini', 'gemini'],
+                  ['DeepSeek', 'deepseek'],
                 ] as const
               ).map(([label, key]) => (
                 <label key={key} className="mb-3 block">

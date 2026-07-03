@@ -1,6 +1,8 @@
 import Store from 'electron-store'
-import type { DevPadConfig } from '@shared/types'
-import { DEFAULT_PROFILES, DEFAULT_PROFILE_ID } from '../src/lib/profiles'
+import type { DevPadConfig, ProviderId } from '@shared/types'
+import { DEFAULT_PROFILES, DEFAULT_PROFILE_ID, findProfile } from '../src/lib/profiles'
+import { getModel } from '../src/lib/models'
+import { DEFAULT_SELECTION } from '../src/lib/providerTiers'
 
 // Persistent configuration for DevPad. Everything (config, profiles, API keys)
 // lives locally in electron-store — there is no cloud sync of any kind.
@@ -14,11 +16,14 @@ const defaults: DevPadConfig = {
   setupComplete: false,
   tourComplete: false,
   agentMode: 'ask',
-  apiKeys: { deepseek: '', gemini: '', openai: '' },
+  apiKeys: { deepseek: '', gemini: '', openai: '', anthropic: '' },
   godotExecutablePath: '',
   projectDir: '',
   recentProjects: [],
   activeVersionId: 'godot-4',
+  // modelSelection is intentionally NOT defaulted here — migrateConfig() sets it
+  // (deriving from an existing install's profile, or DEFAULT_SELECTION for a
+  // fresh install) so we can tell "never set" from "set to the default".
   activeProfileId: DEFAULT_PROFILE_ID,
   profiles: DEFAULT_PROFILES,
   notes: [],
@@ -63,6 +68,38 @@ export function ensureDefaultProfiles(): void {
       ...existing.filter((p) => !builtinIds.has(p.id)),
     ]
     store.set('profiles', merged)
+  }
+}
+
+/**
+ * One-time config migrations for older installs:
+ *  1. Ensure apiKeys has the newer `anthropic` slot (a stored apiKeys object
+ *     from before Anthropic support replaces the default wholesale).
+ *  2. Seed `modelSelection` (the model control that replaced profiles). Existing
+ *     users inherit their old active profile's chat-model provider; fresh
+ *     installs get the recommended default (Anthropic / Mild).
+ */
+export function migrateConfig(): void {
+  const keys = store.get('apiKeys') as Partial<DevPadConfig['apiKeys']> | undefined
+  if (keys && typeof keys === 'object' && typeof keys.anthropic !== 'string') {
+    store.set('apiKeys', {
+      deepseek: keys.deepseek ?? '',
+      gemini: keys.gemini ?? '',
+      openai: keys.openai ?? '',
+      anthropic: '',
+    })
+  }
+
+  if (store.get('modelSelection') === undefined) {
+    // An existing install has completed setup; a fresh one has not.
+    const existingInstall = store.get('setupComplete') === true
+    let selection = DEFAULT_SELECTION
+    if (existingInstall) {
+      const profile = findProfile(store.get('profiles') ?? [], store.get('activeProfileId') ?? '')
+      const provider = profile ? getModel(profile.tasks.chat)?.provider : undefined
+      if (provider) selection = { provider: provider as ProviderId, tier: 'mild' }
+    }
+    store.set('modelSelection', selection)
   }
 }
 
