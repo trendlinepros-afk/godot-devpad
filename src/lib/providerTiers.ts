@@ -232,6 +232,9 @@ export function adaptivePick(inp: AdaptiveInputs): ResolvedModel {
     met ? a.cost - b.cost || b.capability - a.capability : b.capability - a.capability || a.cost - b.cost,
   )
   const best = pool[0]
+  // Unreachable in practice (the router guards on an empty provider list first),
+  // but keep the pure function safe if it's ever called with no candidates.
+  if (!best) return resolveModel(DEFAULT_SELECTION)
   return {
     provider: best.provider,
     tier: best.tier,

@@ -319,8 +319,10 @@ async function classifyTask(
     )
     const match = raw.match(/\{[\s\S]*\}/)
     const parsed = match ? (JSON.parse(match[0]) as Record<string, unknown>) : {}
-    const complexity = COMPLEXITIES.includes(parsed.complexity as Complexity)
-      ? (parsed.complexity as Complexity)
+    // Normalize — weaker classifiers may return "Moderate", " HARD ", etc.
+    const raw_c = String(parsed.complexity ?? '').toLowerCase().trim()
+    const complexity: Complexity = (COMPLEXITIES as string[]).includes(raw_c)
+      ? (raw_c as Complexity)
       : 'moderate'
     const editsCode = typeof parsed.editsCode === 'boolean' ? parsed.editsCode : true
     return { complexity, editsCode }
