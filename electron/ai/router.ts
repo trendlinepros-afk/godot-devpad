@@ -1,7 +1,16 @@
 import type { AiRequest, AiResponse } from '@shared/types'
 import { getConfig } from '../store'
 import { findVersionById } from '../versions'
-import { resolveModel, visionFallback, type ResolvedModel } from '../../src/lib/providerTiers'
+import {
+  adaptivePick,
+  availableTierProviders,
+  classifierModel,
+  resolveModel,
+  visionFallback,
+  COMPLEXITIES,
+  type Complexity,
+  type ResolvedModel,
+} from '../../src/lib/providerTiers'
 import {
   callProvider,
   callProviderAgentic,
@@ -273,6 +282,75 @@ function missingKeyResponse(err: MissingKeyError): AiResponse {
   }
 }
 
+// ── Adaptive routing ─────────────────────────────────────────────────────────
+// "Adaptive" mode: a cheap model judges how hard the task is (and whether it will
+// edit code / needs vision), then adaptivePick() deterministically routes to the
+// cheapest model that clears the bar across the providers the user has keys for.
+
+const CLASSIFIER_SYS = `You are a fast routing classifier for a Godot game-development assistant. Judge the developer's request and reply with ONLY a compact JSON object and no other text:
+{"complexity":"trivial|simple|moderate|hard","editsCode":true|false}
+- complexity = how much reasoning/coding skill the task needs:
+  "trivial" = a greeting, a one-line answer, or a tiny obvious fix.
+  "simple"  = a small, well-scoped change or a clear explanation.
+  "moderate"= a normal feature, a multi-step edit, or routine debugging.
+  "hard"    = large or multi-file work, tricky bugs, architecture, or anything high-risk.
+- editsCode = true if fulfilling the request will create or modify project files/scenes; false if it is only a question, explanation, or plan.
+When unsure about editsCode, answer true. Output JSON only.`
+
+async function classifyTask(
+  reqText: string,
+  hasScreenshot: boolean,
+  k: ProviderKeys,
+): Promise<{ complexity: Complexity; editsCode: boolean }> {
+  const cm = classifierModel(availableTierProviders(k))
+  if (!cm) return { complexity: 'moderate', editsCode: true }
+  try {
+    const raw = await callProvider(
+      {
+        provider: cm.provider,
+        modelId: cm.apiModel,
+        systemPrompt: CLASSIFIER_SYS,
+        text: `Request:\n${(reqText || '(no text — only a screenshot)').slice(0, 1500)}${
+          hasScreenshot ? '\n\n[A screenshot of the game/editor is attached.]' : ''
+        }`,
+      },
+      k,
+      MCP_PORT,
+    )
+    const match = raw.match(/\{[\s\S]*\}/)
+    const parsed = match ? (JSON.parse(match[0]) as Record<string, unknown>) : {}
+    const complexity = COMPLEXITIES.includes(parsed.complexity as Complexity)
+      ? (parsed.complexity as Complexity)
+      : 'moderate'
+    const editsCode = typeof parsed.editsCode === 'boolean' ? parsed.editsCode : true
+    return { complexity, editsCode }
+  } catch {
+    // Never fail the request over classification — fall back to a safe default.
+    return { complexity: 'moderate', editsCode: true }
+  }
+}
+
+async function adaptiveSelect(
+  req: AiRequest,
+  k: ProviderKeys,
+  onProgress?: ProgressFn,
+): Promise<ResolvedModel> {
+  const available = availableTierProviders(k)
+  if (available.length === 0) throw new MissingKeyError('anthropic')
+  onProgress?.('status', 'Adaptive: sizing up the task…')
+  const needsVision = !!req.screenshot
+  const planning = (req.mode ?? 'build') === 'plan' // plan mode never edits
+  const { complexity, editsCode } = await classifyTask(req.text, needsVision, k)
+  const picked = adaptivePick({
+    available,
+    needsVision,
+    editsCode: editsCode && !planning,
+    complexity,
+  })
+  onProgress?.('status', `Adaptive chose ${picked.label} · ${complexity} task`)
+  return { ...picked, label: `${picked.label} · Adaptive`, isAdaptive: true }
+}
+
 /**
  * Route a chat request according to the active profile:
  *   • screenshot   → vision model describes it, then vision_to_code answers
@@ -284,12 +362,18 @@ function missingKeyResponse(err: MissingKeyError): AiResponse {
 export async function route(req: AiRequest, onProgress?: ProgressFn): Promise<AiResponse> {
   // TODO tier policy: when managed keys ship, gate the selection by getTier()
   // here. Today Free and Pro resolve identically (BYOK — the user pays).
-  const selected = activeSelection()
+  const k = keys()
   const sys = systemPrompt()
   const codeSys = codeSystemPrompt(req.mode ?? 'build')
-  const k = keys()
 
   try {
+    // Adaptive mode routes each task to the cheapest capable model; every other
+    // selection resolves to its fixed provider + tier.
+    const selected =
+      getConfig().modelSelection?.provider === 'adaptive'
+        ? await adaptiveSelect(req, k, onProgress)
+        : activeSelection()
+
     // ── Screenshot: describe with a vision model, then answer with the selected model ──
     if (req.screenshot) {
       // The selected model may not accept images (e.g. any DeepSeek tier) — fall

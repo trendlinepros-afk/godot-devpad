@@ -159,7 +159,7 @@ function AiSection() {
     }
   }
 
-  const keyRow = (label: string, provider: Exclude<ProviderId, 'mcp'>) => (
+  const keyRow = (label: string, provider: keyof typeof EMPTY_KEYS) => (
     <div className="mb-3">
       <span className="mb-1 block text-xs font-medium text-slate-400">{label}</span>
       <div className="flex gap-2">
@@ -216,6 +216,10 @@ function AiSection() {
           onChange={(e) => setProvider(e.target.value as ProviderId)}
           className={inputClass}
         >
+          <option value="adaptive" disabled={!providerHasKey(config.apiKeys, 'adaptive')}>
+            ✨ {PROVIDER_LABELS.adaptive}
+            {providerHasKey(config.apiKeys, 'adaptive') ? '' : ' — add a key first'}
+          </option>
           {TIER_PROVIDER_IDS.map((p) => {
             const has = providerHasKey(config.apiKeys, p)
             return (
@@ -232,7 +236,7 @@ function AiSection() {
         </select>
       </Field>
 
-      {selection.provider !== 'mcp' && (
+      {selection.provider !== 'mcp' && selection.provider !== 'adaptive' && (
         <Field label="Tier">
           <div className="flex overflow-hidden rounded-md border border-panel-600">
             {TIER_LEVELS.map((t) => (
@@ -254,23 +258,38 @@ function AiSection() {
       )}
 
       {/* The exact model being used — the "let me know what llm is being used" line */}
-      <div className="mt-2 rounded-md border border-panel-600 bg-panel-800 px-3 py-2.5">
-        <div className="flex items-center gap-2 text-sm">
-          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
-          <span className="text-slate-400">Using:</span>
-          <span className="font-mono text-slate-100">{resolved.apiModel}</span>
-          {!resolved.vision && (
-            <span className="rounded bg-panel-700 px-1.5 py-0.5 text-[10px] text-slate-400">
-              no vision
-            </span>
-          )}
+      {resolved.isAdaptive ? (
+        <div className="mt-2 rounded-md border border-panel-600 bg-panel-800 px-3 py-2.5">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
+            <span className="text-slate-400">Using:</span>
+            <span className="text-slate-100">✨ Adaptive</span>
+          </div>
+          <div className="mt-1 text-[11px] leading-relaxed text-slate-500">
+            Picks the cheapest capable model for each task across the providers you have keys for —
+            cheaper models handle chat &amp; triage, edits go to proven tool-callers (Claude / GPT /
+            Gemini). The exact model that answered is shown on every reply.
+          </div>
         </div>
-        <div className="mt-1 text-[11px] text-slate-500">
-          {resolved.label}
-          {resolved.note ? ` — ${resolved.note}` : ''}
-          {!resolved.vision && ' · screenshots use a vision-capable provider you have a key for'}
+      ) : (
+        <div className="mt-2 rounded-md border border-panel-600 bg-panel-800 px-3 py-2.5">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
+            <span className="text-slate-400">Using:</span>
+            <span className="font-mono text-slate-100">{resolved.apiModel}</span>
+            {!resolved.vision && (
+              <span className="rounded bg-panel-700 px-1.5 py-0.5 text-[10px] text-slate-400">
+                no vision
+              </span>
+            )}
+          </div>
+          <div className="mt-1 text-[11px] text-slate-500">
+            {resolved.label}
+            {resolved.note ? ` — ${resolved.note}` : ''}
+            {!resolved.vision && ' · screenshots use a vision-capable provider you have a key for'}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

@@ -4,7 +4,7 @@
 
 // ── Models ────────────────────────────────────────────────────────────────
 
-export type ProviderId = 'deepseek' | 'gemini' | 'openai' | 'anthropic' | 'mcp'
+export type ProviderId = 'deepseek' | 'gemini' | 'openai' | 'anthropic' | 'mcp' | 'adaptive'
 
 export interface ModelCapabilities {
   chat: boolean

@@ -189,13 +189,17 @@ Each note has an **AI** toggle. Notes you pin are **shared with the AI on every 
     title: 'Choosing your AI model',
     category: 'Settings',
     keywords: ['model', 'provider', 'tier', 'cheap', 'mild', 'expensive', 'anthropic', 'claude', 'deepseek', 'gemini', 'openai', 'cost', 'quality', 'routing'],
-    body: `Pick your AI in **Settings → AI / Models → Model**, or from the model dropdown in the toolbar. You choose a **provider** and a **tier**:
+    body: `Pick your AI in **Settings → AI / Models → Model**, or from the model dropdown in the toolbar.
+
+**✨ Adaptive (recommended)** — Zirtola picks the best model for each task automatically. A fast, cheap model first sizes up your request (how hard is it? will it edit code?), then routes it to the **cheapest capable model** across the providers you have keys for: cheap models handle chat and triage, while actual code edits go to proven tool-callers (Claude / GPT / Gemini). You'll see exactly which model answered on every reply.
+
+Or choose **one provider + tier** yourself:
 
 - **Cheap** — fastest and least expensive.
-- **Mild** — the everyday workhorse (recommended).
+- **Mild** — the everyday workhorse.
 - **Expensive** — top capability for hard, multi-step work.
 
-Providers: **Anthropic (Claude)**, **OpenAI (GPT)**, **Google (Gemini)**, **DeepSeek**, or **Claude via MCP** (Pro). The exact model in use is always shown next to the selector and in the chat header, so you can A/B test models and see precisely which one is answering.`,
+Providers: **Anthropic (Claude)**, **OpenAI (GPT)**, **Google (Gemini)**, **DeepSeek**, or **Claude via MCP** (Pro). The exact model in use is always shown next to the selector and in the chat, so you can A/B test and see precisely which one is answering.`,
   },
   {
     id: 'api-keys',

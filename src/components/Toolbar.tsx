@@ -233,12 +233,16 @@ export function Toolbar({ onHome, onOpenSettings }: ToolbarProps) {
       {/* Current model indicator — the exact model answering right now */}
       <div
         data-tour="model"
-        title={`Model in use: ${resolved.apiModel}`}
+        title={resolved.isAdaptive ? 'Adaptive — best model chosen per task' : `Model in use: ${resolved.apiModel}`}
         className="ml-2 flex items-center gap-1.5 rounded-full border border-panel-600 bg-panel-800 px-2.5 py-0.5 text-xs text-slate-300"
       >
         <span className="h-1.5 w-1.5 rounded-full bg-accent" />
         <span className="text-slate-500">Model:</span>
-        <span className="font-mono">{resolved.apiModel}</span>
+        {resolved.isAdaptive ? (
+          <span>✨ Adaptive</span>
+        ) : (
+          <span className="font-mono">{resolved.apiModel}</span>
+        )}
       </div>
 
       <div className="flex-1" />
@@ -251,16 +255,30 @@ export function Toolbar({ onHome, onOpenSettings }: ToolbarProps) {
           className="flex items-center gap-2 rounded-md border border-panel-600 bg-panel-700 px-3 py-1.5 text-sm text-slate-200 hover:bg-panel-600"
         >
           <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-          {PROVIDER_LABELS[selection.provider]}
-          {selection.provider !== 'mcp' && (
+          {resolved.isAdaptive ? '✨ Adaptive' : PROVIDER_LABELS[selection.provider]}
+          {selection.provider !== 'mcp' && selection.provider !== 'adaptive' && (
             <span className="text-xs text-slate-400">· {TIER_LABELS[selection.tier]}</span>
           )}
           <ChevronDownIcon width={14} height={14} />
         </button>
         {modelMenuOpen && config && (
           <div className="absolute right-0 z-30 mt-1 w-64 overflow-hidden rounded-md border border-panel-600 bg-panel-800 py-1 shadow-xl">
+            <button
+              disabled={!providerHasKey(config.apiKeys, 'adaptive')}
+              onClick={async () => {
+                await setProvider('adaptive')
+                setModelMenuOpen(false)
+              }}
+              className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-sm hover:bg-panel-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent ${
+                selection.provider === 'adaptive' ? 'text-accent-hover' : 'text-slate-200'
+              }`}
+            >
+              <span>✨ Adaptive — best model per task</span>
+              {selection.provider === 'adaptive' && <span className="text-xs">active</span>}
+            </button>
+            <div className="my-1 border-t border-panel-600" />
             <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              Provider
+              Or pick one provider
             </div>
             {TIER_PROVIDER_IDS.map((p) => {
               const has = providerHasKey(config.apiKeys, p)
@@ -303,7 +321,7 @@ export function Toolbar({ onHome, onOpenSettings }: ToolbarProps) {
               ) : null}
             </button>
 
-            {selection.provider !== 'mcp' && (
+            {selection.provider !== 'mcp' && selection.provider !== 'adaptive' && (
               <>
                 <div className="my-1 border-t border-panel-600" />
                 <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
@@ -329,7 +347,13 @@ export function Toolbar({ onHome, onOpenSettings }: ToolbarProps) {
 
             <div className="my-1 border-t border-panel-600" />
             <div className="px-3 py-1.5 text-[11px] text-slate-500">
-              Using <span className="font-mono text-slate-300">{resolved.apiModel}</span>
+              {resolved.isAdaptive ? (
+                'Chooses the cheapest capable model per task'
+              ) : (
+                <>
+                  Using <span className="font-mono text-slate-300">{resolved.apiModel}</span>
+                </>
+              )}
             </div>
           </div>
         )}

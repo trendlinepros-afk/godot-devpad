@@ -313,11 +313,19 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
         </div>
         <div className="flex items-center gap-2">
           <span
-            title={`Model in use: ${selectedModel.apiModel}`}
+            title={
+              selectedModel.isAdaptive
+                ? 'Adaptive — best model chosen per task (shown on each reply)'
+                : `Model in use: ${selectedModel.apiModel}`
+            }
             className="flex items-center gap-1.5 rounded-full border border-panel-600 bg-panel-800 px-2.5 py-0.5 text-xs text-slate-300"
           >
             <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-            <span className="font-mono">{selectedModel.apiModel}</span>
+            {selectedModel.isAdaptive ? (
+              <span>✨ Adaptive</span>
+            ) : (
+              <span className="font-mono">{selectedModel.apiModel}</span>
+            )}
           </span>
           <button
             onClick={() => updateSummary(true)}
@@ -414,7 +422,7 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKeyDown}
             rows={1}
-            placeholder={`Message ${selectedModel.label}…`}
+            placeholder={selectedModel.isAdaptive ? 'Message the AI…' : `Message ${selectedModel.label}…`}
             className="max-h-40 min-h-[2.25rem] flex-1 resize-none rounded-md border border-panel-600 bg-panel-800 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:border-accent focus:outline-none"
           />
           <button
